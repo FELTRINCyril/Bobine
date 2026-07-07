@@ -56,6 +56,16 @@ function hRow(medias, type, opts = {}) {
   return row;
 }
 
+function hRowMixed(medias) {
+  const row = h('<div class="hscroll"><div class="hscroll-inner"></div></div>');
+  const inner = row.firstElementChild;
+  for (const m of medias) {
+    const t = m.media_type || (m.title ? 'movie' : 'tv');
+    inner.appendChild(posterCard(m, { type: t }));
+  }
+  return row;
+}
+
 function section(title, contentEl, linkHash) {
   const s = h(`
     <section class="section">
@@ -68,6 +78,42 @@ function section(title, contentEl, linkHash) {
   `);
   s.querySelector('.section-pad').appendChild(contentEl);
   return s;
+}
+
+const LISTING_PREFIX = 'bobine_lst_';
+
+function stashListing(id, title, type, items) {
+  try {
+    sessionStorage.setItem(LISTING_PREFIX + id, JSON.stringify({ title, type, items }));
+  } catch { /* quota */ }
+  return `#/listing/${id}`;
+}
+
+function mediaSection(title, medias, mediaType, listingId) {
+  if (!medias.length) return null;
+  const display = medias.slice(0, 12);
+  const link = medias.length > 3
+    ? stashListing(listingId, title, mediaType, medias)
+    : null;
+  const row = mediaType === 'mixed' ? hRowMixed(display) : hRow(display, mediaType);
+  return section(title, row, link);
+}
+
+function homeFetchSection(body, title, fetcher, type, listingId) {
+  const holder = h('<div></div>');
+  holder.appendChild(spinner());
+  body.appendChild(section(title, holder, `#/listing/${listingId}`));
+  fetcher()
+    .then((data) => {
+      const results = (data.results || []).filter((m) => m.media_type !== 'person').slice(0, 20);
+      stashListing(listingId, title, type, results);
+      holder.innerHTML = '';
+      holder.appendChild(hRow(results.slice(0, 10), type));
+    })
+    .catch(() => {
+      holder.innerHTML = '';
+      holder.appendChild(emptyState('film', 'Hors ligne', 'Impossible de charger TMDB.'));
+    });
 }
 
 // Reconstruit un pseudo-media TMDB depuis un item local (pour posterCard)
@@ -167,21 +213,29 @@ export async function renderHome() {
   const slots = [
     ['Tendances films', () => api.trending('movie'), 'movie', '#/movies'],
     ['Tendances series', () => api.trending('tv'), 'tv', '#/series'],
+    ['Top 10 Netflix — Films', () => api.discoverProvider('movie', 8), 'movie', 'netflix-movies'],
+    ['Top 10 Netflix — Series', () => api.discoverProvider('tv', 8), 'tv', 'netflix-tv'],
+    ['Populaire sur Disney+', () => api.discoverProvider('movie', 337), 'movie', 'disney-movies'],
+    ['Populaire sur Prime Video', () => api.discoverProvider('movie', 119), 'movie', 'prime-movies'],
     ['Animes populaires', () => api.discoverAnime(), 'tv', '#/anime'],
   ];
   for (const [title, fetcher, type, link] of slots) {
-    const holder = h('<div></div>');
-    holder.appendChild(spinner());
-    body.appendChild(section(title, holder, link));
-    fetcher()
-      .then((data) => {
-        holder.innerHTML = '';
-        holder.appendChild(hRow(data.results.slice(0, 12), type));
-      })
-      .catch(() => {
-        holder.innerHTML = '';
-        holder.appendChild(emptyState('film', 'Hors ligne', 'Impossible de charger TMDB.'));
-      });
+    if (link.startsWith('#/')) {
+      const holder = h('<div></div>');
+      holder.appendChild(spinner());
+      body.appendChild(section(title, holder, link));
+      fetcher()
+        .then((data) => {
+          holder.innerHTML = '';
+          holder.appendChild(hRow(data.results.slice(0, 12), type));
+        })
+        .catch(() => {
+          holder.innerHTML = '';
+          holder.appendChild(emptyState('film', 'Hors ligne', 'Impossible de charger TMDB.'));
+        });
+    } else {
+      homeFetchSection(body, title, fetcher, type, link);
+    }
   }
 }
 
@@ -248,6 +302,7 @@ export async function renderCatalog(name) {
     loading = true;
     if (reset) {
       grid.innerHTML = '';
+      grid.classList.remove('grid--empty');
       pageNum = 1;
       heldBack = [];
     }
@@ -260,6 +315,7 @@ export async function renderCatalog(name) {
         .sort((a, b) => b.updatedAt - a.updatedAt);
       const count = items.length - (items.length % 3);
       if (!count) {
+        grid.classList.add('grid--empty');
         grid.appendChild(emptyState('popcorn', 'Rien ici pour le moment', 'Tes ajouts apparaitront ici.'));
       }
       for (const it of items.slice(0, count)) {
@@ -381,7 +437,10 @@ export async function renderDetail(type, id) {
 
   if (d.genres?.length) {
     const g = h('<div class="genres"></div>');
-    for (const genre of d.genres.slice(0, 4)) g.appendChild(h(`<span class="genre">${esc(genre.name)}</span>`));
+    const browseType = meta.isAnime ? 'anime' : type;
+    for (const genre of d.genres.slice(0, 4)) {
+      g.appendChild(h(`<a class="genre" href="#/browse/${browseType}/${genre.id}">${esc(genre.name)}</a>`));
+    }
     page.appendChild(g);
   }
 
@@ -522,20 +581,19 @@ export async function renderDetail(type, id) {
   loadSagaSections(page, d, type, id);
 
   // ---- Recommandations ----
-  const recos = (d.recommendations?.results || []).filter((m) => m.media_type !== 'person').slice(0, 12);
+  const recos = (d.recommendations?.results || []).filter((m) => m.media_type !== 'person').slice(0, 20);
   if (recos.length) {
-    page.appendChild(section('Recommandations', hRow(recos, type)));
+    const sec = mediaSection('Recommandations', recos, type, `reco-${type}-${id}`);
+    if (sec) page.appendChild(sec);
   }
 }
 
 async function loadSagaSections(page, d, type, id) {
-  const keywords = (d.keywords?.keywords || []).map((k) => k.id);
   const collectionId = d.belongs_to_collection?.id;
-  const companies = (d.production_companies || []).map((c) => c.id);
-  const universe = findUniverse({ type, tmdbId: id, collectionId, keywords, companies });
+  const universe = findUniverse({ type, tmdbId: id, collectionId });
   const seen = new Set();
 
-  function addSection(title, medias, mediaType) {
+  function addSection(title, medias, mediaType, listingId) {
     const filtered = medias.filter((m) => {
       const key = `${mediaType || m.media_type || type}_${m.id}`;
       if (seen.has(key) || m.id === id) return false;
@@ -544,7 +602,8 @@ async function loadSagaSections(page, d, type, id) {
     });
     if (!filtered.length) return;
     const t = mediaType || type;
-    page.appendChild(section(title, hRow(filtered.slice(0, 20), t)));
+    const sec = mediaSection(title, filtered, t, listingId);
+    if (sec) page.appendChild(sec);
   }
 
   if (collectionId) {
@@ -553,7 +612,7 @@ async function loadSagaSections(page, d, type, id) {
       const parts = (col.parts || []).sort((a, b) =>
         (a.release_date || '').localeCompare(b.release_date || '')
       );
-      addSection(col.name || 'Saga', parts, 'movie');
+      addSection(col.name || 'Saga', parts, 'movie', `col-${collectionId}`);
     } catch { /* hors ligne */ }
   }
 
@@ -571,31 +630,10 @@ async function loadSagaSections(page, d, type, id) {
 
   for (const tvId of universe.match?.tv || []) {
     if (type === 'tv' && tvId === id) continue;
-    all.push({ id: tvId, media_type: 'tv', name: '', poster_path: null });
     try {
       const tv = await api.detail('tv', tvId);
-      all[all.length - 1] = { ...tv, media_type: 'tv' };
+      all.push({ ...tv, media_type: 'tv' });
     } catch { /* ignore */ }
-  }
-
-  if (universe.keyword) {
-    try {
-      const [km, kt] = await Promise.all([
-        api.keywordMovies(universe.keyword),
-        api.keywordTv(universe.keyword),
-      ]);
-      for (const m of km.results || []) all.push({ ...m, media_type: 'movie' });
-      for (const t of kt.results || []) all.push({ ...t, media_type: 'tv' });
-    } catch { /* ignore */ }
-  }
-
-  if (universe.match?.companies?.length) {
-    for (const co of universe.match.companies) {
-      try {
-        const data = await api.discoverByCompany(co);
-        for (const m of data.results || []) all.push({ ...m, media_type: 'movie' });
-      } catch { /* ignore */ }
-    }
   }
 
   all.sort((a, b) => {
@@ -604,7 +642,7 @@ async function loadSagaSections(page, d, type, id) {
     return da.localeCompare(db);
   });
 
-  addSection(universe.name, all);
+  addSection(universe.name, all, 'mixed', `uni-${universe.id}`);
 }
 
 function seasonBlock(meta, detail, s, onChange) {
@@ -1029,7 +1067,8 @@ export function renderProfile() {
 
   page.appendChild(h(`
     <p class="credit">
-      Donnees stockees uniquement sur cet appareil.<br>
+      Donnees stockees sur cet appareil (IndexedDB + copie de secours locale).<br>
+      Pour ne pas perdre tes donnees, exporte-les regulierement depuis ce menu.<br>
       Ce produit utilise l'API TMDB mais n'est ni approuve ni certifie par TMDB.
     </p>
   `));
@@ -1258,4 +1297,124 @@ export function renderLibrary(name) {
   for (const it of items) {
     list.appendChild(mediaListRow(it, { sub: cfg.sub(it) }));
   }
+}
+
+/* ============================== LISTING (tout voir) ============================== */
+
+export function renderListing(id) {
+  const v = $view();
+  v.innerHTML = '';
+  const page = h('<div class="page"></div>');
+  page.appendChild(pageHead('Liste', { back: true }));
+  bindBack(page);
+  v.appendChild(page);
+
+  const grid = h('<div class="grid"></div>');
+  page.appendChild(grid);
+
+  let data;
+  try {
+    data = JSON.parse(sessionStorage.getItem(LISTING_PREFIX + id) || 'null');
+  } catch {
+    data = null;
+  }
+
+  if (!data?.items?.length) {
+    grid.classList.add('grid--empty');
+    grid.appendChild(emptyState('list', 'Liste introuvable', 'Reviens en arriere et reessaie.'));
+    return;
+  }
+
+  page.querySelector('.page-title').textContent = data.title;
+  const type = data.type;
+  const items = data.items;
+  const count = items.length - (items.length % 3 || 0) || items.length;
+  for (const m of items.slice(0, count)) {
+    const t = type === 'mixed' ? (m.media_type || (m.title ? 'movie' : 'tv')) : type;
+    grid.appendChild(posterCard(m, { type: t, sub: mediaYear(m) }));
+  }
+}
+
+/* ============================== PARCOURIR PAR GENRE ============================== */
+
+const genreNames = {};
+
+async function getGenreName(apiType, genreId) {
+  if (!genreNames[apiType]) {
+    try {
+      const data = await api.genreList(apiType);
+      genreNames[apiType] = Object.fromEntries((data.genres || []).map((g) => [g.id, g.name]));
+    } catch {
+      genreNames[apiType] = {};
+    }
+  }
+  return genreNames[apiType][genreId] || 'Genre';
+}
+
+export async function renderBrowse(mediaType, genreId) {
+  const v = $view();
+  v.innerHTML = '';
+  const page = h('<div class="page"></div>');
+  const animeMode = mediaType === 'anime';
+  const apiType = animeMode ? 'tv' : mediaType;
+  page.appendChild(pageHead('Chargement...', { back: true }));
+  bindBack(page);
+  v.appendChild(page);
+
+  const grid = h('<div class="grid"></div>');
+  const moreWrap = h('<div class="loadmore-wrap"></div>');
+  const more = h('<button class="btn ghost loadmore">Charger plus</button>');
+  moreWrap.appendChild(more);
+  page.append(grid, moreWrap);
+
+  const genreLabel = await getGenreName(apiType, genreId);
+  page.querySelector('.page-title').textContent = genreLabel;
+
+  let pageNum = 1;
+  let loading = false;
+  let heldBack = [];
+
+  const extra = animeMode
+    ? { with_origin_country: 'JP', with_genres: genreId === 16 ? '16' : `${genreId},16` }
+    : {};
+
+  async function load(reset) {
+    if (loading) return;
+    loading = true;
+    if (reset) {
+      grid.innerHTML = '';
+      grid.classList.remove('grid--empty');
+      pageNum = 1;
+      heldBack = [];
+    }
+    const sp = spinner();
+    grid.parentElement.insertBefore(sp, moreWrap);
+    try {
+      const data = await api.discoverByGenre(apiType, genreId, pageNum, extra);
+      let batch = (data.results || []).filter((m) => !animeMode || isAnime(m));
+      if (heldBack.length) {
+        batch = [...heldBack, ...batch];
+        heldBack = [];
+      }
+      const usable = batch.length - (batch.length % 3);
+      heldBack = batch.slice(usable);
+      batch = batch.slice(0, usable);
+      for (const m of batch) {
+        grid.appendChild(posterCard(m, { type: apiType, sub: mediaYear(m) }));
+      }
+      moreWrap.style.display = pageNum >= data.total_pages ? 'none' : '';
+      pageNum++;
+    } catch {
+      if (!grid.children.length) {
+        grid.classList.add('grid--empty');
+        grid.appendChild(emptyState('film', 'Hors ligne', 'Impossible de charger TMDB.'));
+      }
+      moreWrap.style.display = 'none';
+    }
+    sp.remove();
+    loading = false;
+  }
+
+  more.addEventListener('click', () => load(false));
+  load(true);
 }

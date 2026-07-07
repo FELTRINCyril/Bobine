@@ -31,7 +31,26 @@ export const api = {
   discoverTv: (sort, page = 1) =>
     get('/discover/tv', { sort_by: sort, page, 'vote_count.gte': 50 }),
 
-  // Animes : animation japonaise
+  discoverByGenre: (type, genreId, page = 1, extra = {}) =>
+    get(`/discover/${type}`, {
+      with_genres: genreId,
+      sort_by: 'popularity.desc',
+      page,
+      ...(type === 'movie' ? { 'vote_count.gte': 80 } : { 'vote_count.gte': 40 }),
+      ...extra,
+    }),
+
+  discoverProvider: (type, providerId, page = 1) =>
+    get(`/discover/${type}`, {
+      with_watch_providers: providerId,
+      watch_region: 'FR',
+      sort_by: 'popularity.desc',
+      page,
+      ...(type === 'movie' ? { 'vote_count.gte': 80 } : { 'vote_count.gte': 40 }),
+    }),
+
+  genreList: (type) => get(`/genre/${type}/list`),
+
   discoverAnime: (page = 1, sort = 'popularity.desc') =>
     get('/discover/tv', {
       with_genres: 16,
@@ -70,14 +89,6 @@ export const api = {
 
   keywordTv: (id, page = 1) =>
     get(`/keyword/${id}/tv`, { page, sort_by: 'first_air_date.asc' }),
-
-  discoverByCompany: (companyId, page = 1) =>
-    get('/discover/movie', {
-      with_companies: companyId,
-      sort_by: 'release_date.asc',
-      page,
-      'vote_count.gte': 50,
-    }),
 
   season: (tvId, num) => get(`/tv/${tvId}/season/${num}`),
 

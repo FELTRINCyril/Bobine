@@ -4,7 +4,7 @@ import { h, I } from './ui.js';
 import {
   renderHome, renderCatalog, renderDetail, renderWatchlist,
   renderPlaylists, renderPlaylist, renderProfile, renderSearch,
-  renderStats, renderLibrary,
+  renderStats, renderLibrary, renderListing, renderBrowse,
 } from './views.js';
 
 const TABS = [
@@ -41,7 +41,7 @@ function route() {
   if (currentHash) scrollPos.set(currentHash, window.scrollY);
   const hash = location.hash || '#/home';
   currentHash = hash;
-  const [, path, a, b] = hash.split('/'); // '#', path, args
+  const [, path, a, b, c] = hash.split('/'); // '#', path, args
 
   document.getElementById('overlay-root').innerHTML = '';
   syncTabbar(hash);
@@ -59,6 +59,8 @@ function route() {
     case 'search': renderSearch(); break;
     case 'stats': renderStats(); break;
     case 'library': renderLibrary(a); break;
+    case 'listing': renderListing(a); break;
+    case 'browse': renderBrowse(a, Number(b), c); break;
     default: renderHome();
   }
 
@@ -69,6 +71,9 @@ function route() {
 
 async function boot() {
   buildTabbar();
+  if (navigator.storage?.persist) {
+    try { await navigator.storage.persist(); } catch { /* ignore */ }
+  }
   await loadState();
   if (!location.hash) location.hash = '#/home';
   route();

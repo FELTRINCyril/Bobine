@@ -298,6 +298,20 @@ input, textarea {
 
 .grid .card { width: auto; }
 
+.grid--empty {
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  min-height: 44vh;
+  grid-template-columns: 1fr;
+  padding-top: 48px;
+}
+
+.grid--empty .empty {
+  width: 100%;
+  max-width: 300px;
+}
+
 /* ---------- Chips ---------- */
 
 .chips {
@@ -623,6 +637,12 @@ input, textarea {
   background: var(--surface-2);
   padding: 4px 10px;
   border-radius: 999px;
+  transition: background 0.15s, color 0.15s;
+}
+
+a.genre:active {
+  background: var(--accent-soft);
+  color: var(--accent);
 }
 
 /* Stepper de visionnages */

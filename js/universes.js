@@ -1,23 +1,22 @@
-// Univers / franchises multi-collections (TMDB ids)
-// Quand un titre appartient a un univers, on affiche tous ses elements.
+// Univers / franchises — collections TMDB uniquement (pas de keyword/company trop larges)
 
 export const UNIVERSES = [
   {
     id: 'middle-earth',
     name: 'Terre du Milieu',
     match: {
-      collections: [119, 121938], // LOTR, Hobbit
-      movies: [],
-      tv: [84773], // Les Anneaux de Pouvoir
+      collections: [119, 121938],
+      tv: [84773],
     },
   },
   {
     id: 'mcu',
     name: 'Marvel Cinematic Universe',
-    keyword: 180547,
     match: {
-      collections: [131292, 131295, 131296, 386382, 748, 131299], // Iron Man, Thor, Cap, etc.
-      companies: [420], // Marvel Studios
+      collections: [
+        131292, 131295, 131296, 386382, 748, 131299, 86311, 295,
+        131296, 131293, 131294, 623911, 131300,
+      ],
     },
   },
   {
@@ -28,24 +27,21 @@ export const UNIVERSES = [
   {
     id: 'wizarding-world',
     name: 'Monde des sorciers',
-    match: { collections: [1241, 435259] }, // Harry Potter, Fantastic Beasts
+    match: { collections: [1241, 435259] },
   },
   {
     id: 'dceu',
     name: 'DC Extended Universe',
-    keyword: 84977,
-    match: { collections: [52783, 468552] },
+    match: { collections: [52783, 468552, 724848] },
   },
 ];
 
-export function findUniverse({ type, tmdbId, collectionId, keywords = [], companies = [] }) {
+export function findUniverse({ type, tmdbId, collectionId }) {
   for (const u of UNIVERSES) {
     const m = u.match || {};
     if (collectionId && m.collections?.includes(collectionId)) return u;
     if (type === 'movie' && m.movies?.includes(tmdbId)) return u;
     if (type === 'tv' && m.tv?.includes(tmdbId)) return u;
-    if (u.keyword && keywords.includes(u.keyword)) return u;
-    if (m.companies?.some((c) => companies.includes(c))) return u;
   }
   return null;
 }

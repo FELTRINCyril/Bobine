@@ -57,10 +57,45 @@ export const state = {
   playlists: new Map(), // id -> playlist
 };
 
+const BACKUP_KEY = 'bobine_backup_v1';
+
+export function syncBackup() {
+  try {
+    localStorage.setItem(BACKUP_KEY, JSON.stringify({
+      at: Date.now(),
+      items: [...state.items.values()],
+      playlists: [...state.playlists.values()],
+    }));
+  } catch { /* quota depassee */ }
+}
+
+async function restoreFromBackup() {
+  try {
+    const bak = JSON.parse(localStorage.getItem(BACKUP_KEY) || 'null');
+    if (!bak?.items?.length && !bak?.playlists?.length) return false;
+    for (const it of bak.items || []) {
+      state.items.set(it.id, it);
+      await idbPut('items', it);
+    }
+    for (const pl of bak.playlists || []) {
+      state.playlists.set(pl.id, pl);
+      await idbPut('playlists', pl);
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export async function loadState() {
   const [items, playlists] = await Promise.all([idbAll('items'), idbAll('playlists')]);
-  for (const it of items) state.items.set(it.id, it);
-  for (const pl of playlists) state.playlists.set(pl.id, pl);
+  if (!items.length && !playlists.length) {
+    await restoreFromBackup();
+  } else {
+    for (const it of items) state.items.set(it.id, it);
+    for (const pl of playlists) state.playlists.set(pl.id, pl);
+    syncBackup();
+  }
 }
 
 // ---- Items ----
@@ -133,6 +168,7 @@ export async function saveItem(it) {
   } else {
     await idbPut('items', it);
   }
+  syncBackup();
 }
 
 // ---- Stats derivees ----
@@ -229,11 +265,13 @@ export function createPlaylist(name) {
   };
   state.playlists.set(pl.id, pl);
   idbPut('playlists', pl);
+  syncBackup();
   return pl;
 }
 
 export async function savePlaylist(pl) {
   await idbPut('playlists', pl);
+  syncBackup();
 }
 
 export async function deletePlaylist(id) {
@@ -246,6 +284,7 @@ export async function deletePlaylist(id) {
       await idbDel('items', it.id);
     }
   }
+  syncBackup();
 }
 
 // ---- Export / import ----
@@ -277,5 +316,6 @@ export async function importJson(text) {
     state.playlists.set(pl.id, pl);
     await idbPut('playlists', pl);
   }
+  syncBackup();
   return { items: data.items.length, playlists: (data.playlists || []).length };
 }
