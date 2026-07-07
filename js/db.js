@@ -162,6 +162,61 @@ export function isStarted(it) {
   return watchedEpisodeCount(it) > 0;
 }
 
+// ---- Temps de visionnage (minutes) ----
+
+export function movieWatchMinutes(it) {
+  if (it.type !== 'movie' || !it.plays) return 0;
+  const runtime = it.runtime || 100;
+  return it.plays * runtime;
+}
+
+export function tvWatchMinutes(it) {
+  if (it.type !== 'tv') return 0;
+  let total = 0;
+  for (const [key, plays] of Object.entries(it.episodes || {})) {
+    if (plays <= 0) continue;
+    const runtime = it.episodeRuntimes?.[key] || it.episodeRuntime || 50;
+    total += plays * runtime;
+  }
+  return total;
+}
+
+export function itemWatchMinutes(it) {
+  return movieWatchMinutes(it) + tvWatchMinutes(it);
+}
+
+export function formatDuration(totalMinutes) {
+  if (!totalMinutes) return '0 min';
+  const days = Math.floor(totalMinutes / 1440);
+  const hours = Math.floor((totalMinutes % 1440) / 60);
+  const mins = Math.round(totalMinutes % 60);
+  const parts = [];
+  if (days) parts.push(`${days} j`);
+  if (hours) parts.push(`${hours} h`);
+  if (mins || !parts.length) parts.push(`${mins} min`);
+  return parts.join(' ');
+}
+
+export function computeStats() {
+  const items = [...state.items.values()];
+  const moviesSeen = items.filter((i) => i.type === 'movie' && i.plays > 0);
+  const moviePlays = moviesSeen.reduce((a, i) => a + i.plays, 0);
+  const tvStarted = items.filter((i) => i.type === 'tv' && watchedEpisodeCount(i) > 0);
+  const epsSeen = tvStarted.reduce((a, i) => a + watchedEpisodeCount(i), 0);
+  const epPlays = tvStarted.reduce((a, i) => a + totalEpisodePlays(i), 0);
+  const favs = items.filter((i) => i.favorite);
+  const animes = items.filter((i) => i.isAnime && (i.plays > 0 || watchedEpisodeCount(i) > 0));
+  const totalMinutes = items.reduce((a, i) => a + itemWatchMinutes(i), 0);
+  const movieMinutes = moviesSeen.reduce((a, i) => a + movieWatchMinutes(i), 0);
+  const tvMinutes = tvStarted.reduce((a, i) => a + tvWatchMinutes(i), 0);
+  const animeMinutes = animes.reduce((a, i) => a + itemWatchMinutes(i), 0);
+  const rewatches = (moviePlays - moviesSeen.length) + (epPlays - epsSeen);
+  return {
+    moviesSeen, moviePlays, tvStarted, epsSeen, epPlays, favs,
+    animes, totalMinutes, movieMinutes, tvMinutes, animeMinutes, rewatches,
+  };
+}
+
 // ---- Playlists ----
 // playlist = { id, name, items: [{id, type, tmdbId, title, poster, year}], createdAt }
 

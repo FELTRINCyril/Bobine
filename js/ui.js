@@ -28,6 +28,8 @@ export const I = {
   download: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11m0 0 4-4m-4 4-4-4"/><path d="M5 20h14"/></svg>',
   upload: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V4m0 0 4 4m-4-4-4 4"/><path d="M5 20h14"/></svg>',
   popcorn: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9 7.5 21h9L18 9"/><path d="M5 9h14"/><path d="M7 6a2.5 2.5 0 0 1 3.4-2.3A2.5 2.5 0 0 1 14 2.6 2.5 2.5 0 0 1 17.5 6"/><path d="M10 9l.7 12M14 9l-.7 12"/></svg>',
+  play: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.14v14.72a1 1 0 0 0 1.5.86l11.02-7.36a1 1 0 0 0 0-1.72L9.5 4.28A1 1 0 0 0 8 5.14Z"/></svg>',
+  info: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 10v6M12 7h.01"/></svg>',
 };
 
 // ---- Helpers DOM ----
@@ -58,6 +60,12 @@ export function mediaType(m) {
 export function typeLabel(type, anime) {
   if (anime) return 'Anime';
   return type === 'movie' ? 'Film' : 'Serie';
+}
+
+export function isReleased(m) {
+  const d = m.release_date || m.first_air_date;
+  if (!d) return true;
+  return d <= new Date().toISOString().slice(0, 10);
 }
 
 // ---- Carte affiche ----
@@ -118,8 +126,13 @@ export function openSheet(contentEl) {
 
 // ---- Toast ----
 
+const TOAST_MAX = 3;
+
 export function toast(msg) {
   const root = document.getElementById('toast-root');
+  while (root.children.length >= TOAST_MAX) {
+    root.firstElementChild?.remove();
+  }
   const t = h(`<div class="toast">${esc(msg)}</div>`);
   root.appendChild(t);
   setTimeout(() => {

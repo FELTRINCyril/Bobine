@@ -4,6 +4,7 @@ import { h, I } from './ui.js';
 import {
   renderHome, renderCatalog, renderDetail, renderWatchlist,
   renderPlaylists, renderPlaylist, renderProfile, renderSearch,
+  renderStats, renderLibrary,
 } from './views.js';
 
 const TABS = [
@@ -56,6 +57,8 @@ function route() {
     case 'playlist': renderPlaylist(a); break;
     case 'detail': renderDetail(a, Number(b)); break;
     case 'search': renderSearch(); break;
+    case 'stats': renderStats(); break;
+    case 'library': renderLibrary(a); break;
     default: renderHome();
   }
 

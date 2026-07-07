@@ -3,6 +3,7 @@ import {
   ensureItem, saveItem, getItem, state,
   createPlaylist, savePlaylist,
 } from './db.js';
+import { api } from './api.js';
 import { h, esc, I, openSheet, toast } from './ui.js';
 
 // meta = { type, tmdbId, title, poster, backdrop, year, isAnime }
@@ -25,6 +26,7 @@ export async function toggleWatchlist(meta) {
 
 export async function setMoviePlays(meta, plays) {
   const it = ensureItem(meta);
+  if (!it.runtime && meta.runtime) it.runtime = meta.runtime;
   it.plays = Math.max(0, plays);
   await saveItem(it);
   return it.plays;
@@ -32,6 +34,7 @@ export async function setMoviePlays(meta, plays) {
 
 export async function setEpisodePlays(meta, season, episode, plays) {
   const it = ensureItem(meta);
+  if (!it.episodeRuntime) it.episodeRuntime = meta.episodeRuntime || 50;
   const key = `${season}:${episode}`;
   if (plays > 0) it.episodes[key] = plays;
   else delete it.episodes[key];
@@ -40,8 +43,8 @@ export async function setEpisodePlays(meta, season, episode, plays) {
 }
 
 export async function markSeason(meta, season, episodeNumbers, mode) {
-  // mode: 'all' (tout a 1 si pas vu), 'none' (tout a 0), 'rewatch' (+1 partout)
   const it = ensureItem(meta);
+  if (!it.episodeRuntime) it.episodeRuntime = meta.episodeRuntime || 50;
   for (const ep of episodeNumbers) {
     const key = `${season}:${ep}`;
     const cur = it.episodes[key] || 0;
@@ -53,19 +56,52 @@ export async function markSeason(meta, season, episodeNumbers, mode) {
 }
 
 export function updateItemTotals(meta, detail) {
-  // memorise le nombre total d'episodes (pour les barres de progression)
   const it = getItem(meta.type, meta.tmdbId);
   if (!it || meta.type !== 'tv') return;
   const totals = {};
   let sum = 0;
   for (const s of detail.seasons || []) {
-    if (s.season_number === 0) continue; // ignore les hors-series
+    if (s.season_number === 0) continue;
     totals[s.season_number] = s.episode_count;
     sum += s.episode_count;
   }
   it.seasonEpisodeTotals = totals;
   it.episodeTotal = sum;
+  if (detail.episode_run_time?.length) {
+    it.episodeRuntime = Math.round(
+      detail.episode_run_time.reduce((a, b) => a + b, 0) / detail.episode_run_time.length
+    );
+  }
   saveItem(it);
+}
+
+export function cacheEpisodeRuntimes(meta, season, episodes) {
+  const it = getItem(meta.type, meta.tmdbId);
+  if (!it) return;
+  if (!it.episodeRuntimes) it.episodeRuntimes = {};
+  for (const ep of episodes) {
+    if (ep.runtime) it.episodeRuntimes[`${season}:${ep.episode_number}`] = ep.runtime;
+  }
+  const vals = Object.values(it.episodeRuntimes);
+  if (vals.length) {
+    it.episodeRuntime = Math.round(vals.reduce((a, b) => a + b, 0) / vals.length);
+  }
+  saveItem(it);
+}
+
+export async function syncTvRuntimes(meta, tmdbId) {
+  const it = getItem('tv', tmdbId);
+  if (!it || !Object.keys(it.episodes || {}).length) return;
+  const seasons = new Set();
+  for (const key of Object.keys(it.episodes)) {
+    if (!it.episodeRuntimes?.[key]) seasons.add(Number(key.split(':')[0]));
+  }
+  for (const sn of seasons) {
+    try {
+      const data = await api.season(tmdbId, sn);
+      cacheEpisodeRuntimes(meta, sn, data.episodes || []);
+    } catch { /* hors ligne */ }
+  }
 }
 
 // ---- Sheet playlists ----

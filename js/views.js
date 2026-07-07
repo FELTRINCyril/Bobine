@@ -2,17 +2,19 @@
 import { api, img, isAnime } from './api.js';
 import {
   state, getItem, saveItem, isSeen, isStarted, tvProgress,
-  watchedEpisodeCount, totalEpisodePlays,
+  watchedEpisodeCount, totalEpisodePlays, computeStats, formatDuration,
   savePlaylist, deletePlaylist, createPlaylist,
-  exportJson, importJson,
+  exportJson, importJson, ensureItem,
 } from './db.js';
+import { findUniverse } from './universes.js';
 import {
   h, esc, I, posterCard, openSheet, toast, emptyState, spinner,
-  mediaTitle, mediaYear, mediaType, typeLabel,
+  mediaTitle, mediaYear, mediaType, typeLabel, isReleased,
 } from './ui.js';
 import {
   toggleFavorite, toggleWatchlist, setMoviePlays, setEpisodePlays,
   markSeason, updateItemTotals, openPlaylistSheet,
+  cacheEpisodeRuntimes, syncTvRuntimes,
 } from './actions.js';
 
 const $view = () => document.getElementById('view');
@@ -48,8 +50,9 @@ function bindBack(root) {
 }
 
 function hRow(medias, type, opts = {}) {
-  const row = h('<div class="hscroll"></div>');
-  for (const m of medias) row.appendChild(posterCard(m, { type, ...opts }));
+  const row = h('<div class="hscroll"><div class="hscroll-inner"></div></div>');
+  const inner = row.firstElementChild;
+  for (const m of medias) inner.appendChild(posterCard(m, { type, ...opts }));
   return row;
 }
 
@@ -60,9 +63,10 @@ function section(title, contentEl, linkHash) {
         <h2 class="section-title">${title}</h2>
         ${linkHash ? `<a class="section-link" href="${linkHash}">Tout voir</a>` : ''}
       </div>
+      <div class="section-pad"></div>
     </section>
   `);
-  s.appendChild(contentEl);
+  s.querySelector('.section-pad').appendChild(contentEl);
   return s;
 }
 
@@ -76,20 +80,47 @@ function mediaFromItem(it) {
 export async function renderHome() {
   const v = $view();
   v.innerHTML = '';
-  const page = h('<div class="page"></div>');
-  page.appendChild(pageHead('Bobine<span class="tick">.</span>'));
+  const page = h('<div class="page page-home"></div>');
   v.appendChild(page);
 
-  // Raccourcis
-  const wlCount = [...state.items.values()].filter((i) => i.watchlist).length;
-  const plCount = state.playlists.size;
-  const quick = h(`
-    <div class="quick-row">
-      <a class="quick" href="#/watchlist">${I.bookmark}<span>Watchlist</span><span class="count">${wlCount}</span></a>
-      <a class="quick" href="#/playlists">${I.list}<span>Playlists</span><span class="count">${plCount}</span></a>
-    </div>
-  `);
-  page.appendChild(quick);
+  // Hero plein ecran (style 5afterdark)
+  const heroSlot = h('<div class="cine-hero-slot"></div>');
+  heroSlot.appendChild(spinner());
+  page.appendChild(heroSlot);
+
+  Promise.all([api.trending('movie'), api.trending('tv')])
+    .then(([movies, series]) => {
+      const pick = movies.results?.[0] || series.results?.[0];
+      if (!pick) { heroSlot.remove(); return; }
+      const type = pick.title ? 'movie' : 'tv';
+      const backdrop = img(pick.backdrop_path, 'w1280');
+      const title = mediaTitle(pick);
+      const overview = pick.overview || '';
+      const detailHash = `#/detail/${type}/${pick.id}`;
+      heroSlot.innerHTML = '';
+      heroSlot.appendChild(h(`
+        <div class="cine-hero">
+          <div class="cine-hero-bg">${backdrop ? `<img src="${backdrop}" alt="" loading="eager">` : ''}</div>
+          <div class="cine-hero-shade"></div>
+          <div class="cine-hero-top">
+            <span class="cine-brand">Bobine<span class="tick">.</span></span>
+            <a class="head-btn cine-search" href="#/search" aria-label="Rechercher">${I.search}</a>
+          </div>
+          <div class="cine-hero-content">
+            <h2 class="cine-title">${esc(title)}</h2>
+            ${overview ? `<p class="cine-desc">${esc(overview)}</p>` : ''}
+            <div class="cine-actions">
+              <a class="cine-btn-play" href="${detailHash}">${I.play}<span>Voir la fiche</span></a>
+              <a class="cine-btn-info" href="${detailHash}" aria-label="Plus d'infos">${I.info}</a>
+            </div>
+          </div>
+        </div>
+      `));
+    })
+    .catch(() => heroSlot.remove());
+
+  const body = h('<div class="home-body"></div>');
+  page.appendChild(body);
 
   // En cours (series commencees, pas terminees)
   const started = [...state.items.values()]
@@ -97,12 +128,13 @@ export async function renderHome() {
     .sort((a, b) => b.updatedAt - a.updatedAt)
     .slice(0, 10);
   if (started.length) {
-    const row = h('<div class="hscroll"></div>');
+    const row = h('<div class="hscroll"><div class="hscroll-inner"></div></div>');
+    const inner = row.firstElementChild;
     for (const it of started) {
       const p = tvProgress(it);
       const pct = p.total ? Math.round(p.ratio * 100) : 30;
       const src = img(it.backdrop || it.poster, 'w500');
-      row.appendChild(h(`
+      inner.appendChild(h(`
         <a class="resume-card" href="#/detail/tv/${it.tmdbId}">
           ${src ? `<img class="bg" src="${src}" alt="" loading="lazy">` : '<div class="bg"></div>'}
           <div class="info">
@@ -113,7 +145,7 @@ export async function renderHome() {
         </a>
       `));
     }
-    page.appendChild(section('Reprendre', row));
+    body.appendChild(section('Reprendre', row));
   }
 
   // Watchlist apercu
@@ -122,9 +154,13 @@ export async function renderHome() {
     .sort((a, b) => b.updatedAt - a.updatedAt)
     .slice(0, 12);
   if (wl.length) {
-    const row = h('<div class="hscroll"></div>');
-    for (const it of wl) row.appendChild(posterCard(mediaFromItem(it), { type: it.type, sub: typeLabel(it.type, it.isAnime) }));
-    page.appendChild(section('Ma watchlist', row, '#/watchlist'));
+    const row = hRow([], 'movie');
+    for (const it of wl) {
+      row.querySelector('.hscroll-inner').appendChild(
+        posterCard(mediaFromItem(it), { type: it.type, sub: typeLabel(it.type, it.isAnime) })
+      );
+    }
+    body.appendChild(section('Ma watchlist', row, '#/watchlist'));
   }
 
   // Tendances (reseau)
@@ -136,7 +172,7 @@ export async function renderHome() {
   for (const [title, fetcher, type, link] of slots) {
     const holder = h('<div></div>');
     holder.appendChild(spinner());
-    page.appendChild(section(title, holder, link));
+    body.appendChild(section(title, holder, link));
     fetcher()
       .then((data) => {
         holder.innerHTML = '';
@@ -196,13 +232,16 @@ export async function renderCatalog(name) {
 
   const chipsEl = h('<div class="chips"></div>');
   const grid = h('<div class="grid"></div>');
+  const moreWrap = h('<div class="loadmore-wrap"></div>');
   const more = h('<button class="btn ghost loadmore">Charger plus</button>');
-  page.append(chipsEl, grid, more);
+  moreWrap.appendChild(more);
+  page.append(chipsEl, grid, moreWrap);
   v.appendChild(page);
 
   let current = cfg.chips[0];
   let pageNum = 1;
   let loading = false;
+  let heldBack = [];
 
   async function load(reset) {
     if (loading) return;
@@ -210,38 +249,47 @@ export async function renderCatalog(name) {
     if (reset) {
       grid.innerHTML = '';
       pageNum = 1;
+      heldBack = [];
     }
     const type = current.type || cfg.type;
 
     if (current.local) {
-      more.style.display = 'none';
+      moreWrap.style.display = 'none';
       const items = [...state.items.values()]
         .filter(current.local)
         .sort((a, b) => b.updatedAt - a.updatedAt);
-      if (!items.length) {
+      const count = items.length - (items.length % 3);
+      if (!count) {
         grid.appendChild(emptyState('popcorn', 'Rien ici pour le moment', 'Tes ajouts apparaitront ici.'));
       }
-      for (const it of items) {
+      for (const it of items.slice(0, count)) {
         grid.appendChild(posterCard(mediaFromItem(it), { type: it.type, sub: typeLabel(it.type, it.isAnime) }));
       }
       loading = false;
       return;
     }
 
-    more.style.display = '';
+    moreWrap.style.display = '';
     const sp = spinner();
-    grid.parentElement.insertBefore(sp, more);
+    grid.parentElement.insertBefore(sp, moreWrap);
     try {
       const data = await current.fetch(pageNum);
-      for (const m of data.results) {
-        if (m.media_type === 'person') continue;
+      let batch = data.results.filter((m) => m.media_type !== 'person');
+      if (heldBack.length) {
+        batch = [...heldBack, ...batch];
+        heldBack = [];
+      }
+      const usable = batch.length - (batch.length % 3);
+      heldBack = batch.slice(usable);
+      batch = batch.slice(0, usable);
+      for (const m of batch) {
         grid.appendChild(posterCard(m, { type: m.media_type || type }));
       }
-      more.style.display = pageNum >= data.total_pages ? 'none' : '';
+      moreWrap.style.display = pageNum >= data.total_pages ? 'none' : '';
       pageNum++;
     } catch {
       grid.appendChild(emptyState('film', 'Hors ligne', 'Impossible de charger TMDB.'));
-      more.style.display = 'none';
+      moreWrap.style.display = 'none';
     }
     sp.remove();
     loading = false;
@@ -285,6 +333,19 @@ export async function renderDetail(type, id) {
   const meta = metaFrom(d, type);
   page.innerHTML = '';
 
+  // Memorise durees pour les stats
+  const tracked = ensureItem(meta);
+  if (type === 'movie' && d.runtime) tracked.runtime = d.runtime;
+  if (type === 'tv' && d.episode_run_time?.length) {
+    tracked.episodeRuntime = Math.round(
+      d.episode_run_time.reduce((a, b) => a + b, 0) / d.episode_run_time.length
+    );
+  } else if (type === 'tv') {
+    tracked.episodeRuntime = tracked.episodeRuntime || 50;
+  }
+  meta.episodeRuntime = tracked.episodeRuntime;
+  saveItem(tracked);
+
   // Hero
   const backdrop = img(d.backdrop_path, 'w780');
   page.appendChild(h(`
@@ -325,13 +386,18 @@ export async function renderDetail(type, id) {
   }
 
   // Memorise les totaux d'episodes si l'item est suivi
-  if (type === 'tv') updateItemTotals(meta, d);
+  if (type === 'tv') {
+    updateItemTotals(meta, d);
+    syncTvRuntimes(meta, d.id);
+  }
+
+  const released = type === 'movie' ? isReleased(d) : true;
 
   // ---- Actions ----
   const actions = h('<div class="detail-actions"></div>');
   page.appendChild(actions);
 
-  const playsBarHolder = h('<div></div>');
+  const playsBarHolder = h(`<div class="plays-bar-slot${type === 'tv' ? ' plays-bar-slot--tv' : ''}"></div>`);
   page.appendChild(playsBarHolder);
 
   function renderActions() {
@@ -340,37 +406,45 @@ export async function renderDetail(type, id) {
     const fav = it?.favorite;
     const wl = it?.watchlist;
     actions.innerHTML = '';
+    actions.classList.toggle('detail-actions--3', !released);
 
-    const seenBtn = h(`<button class="act ${seen ? 'on-seen' : ''}">${seen ? I.check : I.eye}<span>${seen ? 'Vu' : 'A voir ?'}</span></button>`);
+    const btns = [];
+
+    if (released) {
+      const seenBtn = h(`<button class="act ${seen ? 'on-seen' : ''}">${seen ? I.check : I.eye}<span>${seen ? 'Vu' : 'Marquer vu'}</span></button>`);
+      seenBtn.addEventListener('click', async () => {
+        if (type === 'movie') {
+          const cur = getItem(type, d.id)?.plays || 0;
+          await setMoviePlays(meta, cur > 0 ? 0 : 1);
+          toast(cur > 0 ? 'Marque non vu' : 'Marque comme vu');
+        } else {
+          const target = !seen;
+          for (const s of d.seasons || []) {
+            if (s.season_number === 0) continue;
+            const eps = Array.from({ length: s.episode_count }, (_, i) => i + 1);
+            await markSeason(meta, s.season_number, eps, target ? 'all' : 'none');
+          }
+          updateItemTotals(meta, d);
+          await syncTvRuntimes(meta, d.id);
+          toast(target ? 'Serie marquee comme vue' : 'Serie marquee non vue');
+          renderSeasons();
+        }
+        renderActions();
+        renderPlaysBar();
+      });
+      btns.push(seenBtn);
+    }
+
     const favBtn = h(`<button class="act ${fav ? 'on-fav' : ''}">${fav ? I.heartFill : I.heart}<span>Favori</span></button>`);
     const wlBtn = h(`<button class="act ${wl ? 'on-list' : ''}">${wl ? I.bookmarkFill : I.bookmark}<span>Watchlist</span></button>`);
     const plBtn = h(`<button class="act">${I.plus}<span>Playlist</span></button>`);
 
-    seenBtn.addEventListener('click', async () => {
-      if (type === 'movie') {
-        const cur = getItem(type, d.id)?.plays || 0;
-        await setMoviePlays(meta, cur > 0 ? 0 : 1);
-        toast(cur > 0 ? 'Marque non vu' : 'Marque comme vu');
-      } else {
-        // serie : marque toutes les saisons vues / non vues
-        const target = !seen;
-        for (const s of d.seasons || []) {
-          if (s.season_number === 0) continue;
-          const eps = Array.from({ length: s.episode_count }, (_, i) => i + 1);
-          await markSeason(meta, s.season_number, eps, target ? 'all' : 'none');
-        }
-        updateItemTotals(meta, d);
-        toast(target ? 'Serie marquee comme vue' : 'Serie marquee non vue');
-        renderSeasons();
-      }
-      renderActions();
-      renderPlaysBar();
-    });
     favBtn.addEventListener('click', async () => { await toggleFavorite(meta); renderActions(); });
     wlBtn.addEventListener('click', async () => { await toggleWatchlist(meta); renderActions(); });
     plBtn.addEventListener('click', () => openPlaylistSheet(meta));
 
-    actions.append(seenBtn, favBtn, wlBtn, plBtn);
+    btns.push(favBtn, wlBtn, plBtn);
+    actions.append(...btns);
   }
 
   function renderPlaysBar() {
@@ -398,13 +472,13 @@ export async function renderDetail(type, id) {
         })
       );
       playsBarHolder.appendChild(bar);
-    } else if (it && totalEpisodePlays(it) > 0) {
-      const p = tvProgress(it);
-      const plays = totalEpisodePlays(it);
+    } else {
+      const p = tvProgress(it || { episodes: {}, episodeTotal: 0 });
+      const plays = it ? totalEpisodePlays(it) : 0;
       playsBarHolder.appendChild(h(`
-        <div class="plays-bar">
+        <div class="plays-bar ${plays ? '' : 'plays-bar--empty'}">
           <span class="lbl">${p.watched}${p.total ? '/' + p.total : ''} ep. vus</span>
-          <span class="lbl" style="opacity:0.85">${plays} visionnage${plays > 1 ? 's' : ''}</span>
+          <span class="lbl plays-bar-extra">${plays ? `${plays} visionnage${plays > 1 ? 's' : ''}` : '&nbsp;'}</span>
         </div>
       `));
     }
@@ -422,7 +496,7 @@ export async function renderDetail(type, id) {
       moreBtn.textContent = clamped ? 'Lire la suite' : 'Reduire';
     });
     const s = section('Synopsis', ov);
-    s.appendChild(moreBtn);
+    s.querySelector('.section-pad').appendChild(moreBtn);
     page.appendChild(s);
   }
 
@@ -433,16 +507,19 @@ export async function renderDetail(type, id) {
   function renderSeasons() {
     if (type !== 'tv') return;
     seasonsHolder.innerHTML = '';
-    const wrap = section('Episodes', h('<div></div>'));
+    const seasonBody = h('<div></div>');
+    const wrap = section('Episodes', seasonBody);
     seasonsHolder.appendChild(wrap);
-    const body = wrap.lastElementChild;
 
     for (const s of d.seasons || []) {
       if (s.season_number === 0) continue;
-      body.appendChild(seasonBlock(meta, d, s, () => { renderActions(); renderPlaysBar(); }));
+      seasonBody.appendChild(seasonBlock(meta, d, s, () => { renderActions(); renderPlaysBar(); }));
     }
   }
   renderSeasons();
+
+  // ---- Saga / Univers ----
+  loadSagaSections(page, d, type, id);
 
   // ---- Recommandations ----
   const recos = (d.recommendations?.results || []).filter((m) => m.media_type !== 'person').slice(0, 12);
@@ -451,25 +528,108 @@ export async function renderDetail(type, id) {
   }
 }
 
+async function loadSagaSections(page, d, type, id) {
+  const keywords = (d.keywords?.keywords || []).map((k) => k.id);
+  const collectionId = d.belongs_to_collection?.id;
+  const companies = (d.production_companies || []).map((c) => c.id);
+  const universe = findUniverse({ type, tmdbId: id, collectionId, keywords, companies });
+  const seen = new Set();
+
+  function addSection(title, medias, mediaType) {
+    const filtered = medias.filter((m) => {
+      const key = `${mediaType || m.media_type || type}_${m.id}`;
+      if (seen.has(key) || m.id === id) return false;
+      seen.add(key);
+      return true;
+    });
+    if (!filtered.length) return;
+    const t = mediaType || type;
+    page.appendChild(section(title, hRow(filtered.slice(0, 20), t)));
+  }
+
+  if (collectionId) {
+    try {
+      const col = await api.collection(collectionId);
+      const parts = (col.parts || []).sort((a, b) =>
+        (a.release_date || '').localeCompare(b.release_date || '')
+      );
+      addSection(col.name || 'Saga', parts, 'movie');
+    } catch { /* hors ligne */ }
+  }
+
+  if (!universe) return;
+
+  const all = [];
+
+  for (const colId of universe.match?.collections || []) {
+    if (colId === collectionId) continue;
+    try {
+      const col = await api.collection(colId);
+      for (const m of col.parts || []) all.push({ ...m, media_type: 'movie' });
+    } catch { /* ignore */ }
+  }
+
+  for (const tvId of universe.match?.tv || []) {
+    if (type === 'tv' && tvId === id) continue;
+    all.push({ id: tvId, media_type: 'tv', name: '', poster_path: null });
+    try {
+      const tv = await api.detail('tv', tvId);
+      all[all.length - 1] = { ...tv, media_type: 'tv' };
+    } catch { /* ignore */ }
+  }
+
+  if (universe.keyword) {
+    try {
+      const [km, kt] = await Promise.all([
+        api.keywordMovies(universe.keyword),
+        api.keywordTv(universe.keyword),
+      ]);
+      for (const m of km.results || []) all.push({ ...m, media_type: 'movie' });
+      for (const t of kt.results || []) all.push({ ...t, media_type: 'tv' });
+    } catch { /* ignore */ }
+  }
+
+  if (universe.match?.companies?.length) {
+    for (const co of universe.match.companies) {
+      try {
+        const data = await api.discoverByCompany(co);
+        for (const m of data.results || []) all.push({ ...m, media_type: 'movie' });
+      } catch { /* ignore */ }
+    }
+  }
+
+  all.sort((a, b) => {
+    const da = a.release_date || a.first_air_date || '';
+    const db = b.release_date || b.first_air_date || '';
+    return da.localeCompare(db);
+  });
+
+  addSection(universe.name, all);
+}
+
 function seasonBlock(meta, detail, s, onChange) {
   const it = () => getItem('tv', meta.tmdbId);
 
   const block = h(`
     <div class="season">
-      <button class="season-head">
-        <span class="name">${esc(s.name || 'Saison ' + s.season_number)}</span>
-        <span class="cnt"></span>
-        <span class="chev">${I.chevDown}</span>
-      </button>
+      <div class="season-head">
+        <button class="season-toggle" type="button">
+          <span class="name">${esc(s.name || 'Saison ' + s.season_number)}</span>
+          <span class="cnt"></span>
+        </button>
+        <button class="season-mark" type="button" aria-label="Marquer la saison vue">${I.check}</button>
+        <button class="season-toggle chev-btn" type="button" aria-label="Deplier la saison">${I.chevDown}</button>
+      </div>
       <div class="season-progress"><i></i></div>
       <div class="season-body" hidden></div>
     </div>
   `);
 
-  const head = block.querySelector('.season-head');
+  const markBtn = block.querySelector('.season-mark');
   const cnt = block.querySelector('.cnt');
   const prog = block.querySelector('.season-progress');
   const body = block.querySelector('.season-body');
+  const toggles = block.querySelectorAll('.season-toggle');
   let epList = null; // episodes charges depuis TMDB
 
   function seasonStats() {
@@ -489,9 +649,34 @@ function seasonBlock(meta, detail, s, onChange) {
     const pct = total ? Math.round((watched / total) * 100) : 0;
     prog.querySelector('i').style.width = pct + '%';
     prog.classList.toggle('done', total > 0 && watched >= total);
+    markBtn.classList.toggle('on', total > 0 && watched >= total);
     onChange?.();
   }
   refreshHead();
+
+  markBtn.addEventListener('click', async (e) => {
+    e.stopPropagation();
+    const { watched, total } = seasonStats();
+    const allSeen = total > 0 && watched >= total;
+    const nums = Array.from({ length: s.episode_count }, (_, i) => i + 1);
+    if (allSeen) {
+      await markSeason(meta, s.season_number, nums, 'none');
+      toast('Saison marquee non vue');
+    } else {
+      await markSeason(meta, s.season_number, nums, 'all');
+      updateItemTotals(meta, detail);
+      try {
+        const data = await api.season(meta.tmdbId, s.season_number);
+        cacheEpisodeRuntimes(meta, s.season_number, data.episodes || []);
+      } catch { /* hors ligne */ }
+      toast('Saison marquee vue');
+    }
+    if (epList) {
+      body.querySelectorAll('.ep').forEach((el) => el.remove());
+      for (const ep of epList) body.appendChild(epRow(ep));
+    }
+    refreshHead();
+  });
 
   function epRow(ep) {
     const key = `${s.season_number}:${ep.episode_number}`;
@@ -521,12 +706,14 @@ function seasonBlock(meta, detail, s, onChange) {
 
     check.addEventListener('click', async () => {
       await setEpisodePlays(meta, s.season_number, ep.episode_number, plays() > 0 ? 0 : 1);
+      if (ep.runtime) cacheEpisodeRuntimes(meta, s.season_number, [ep]);
       updateItemTotals(meta, detail);
       refresh();
       refreshHead();
     });
     playsBtn.addEventListener('click', async () => {
       await setEpisodePlays(meta, s.season_number, ep.episode_number, plays() + 1);
+      if (ep.runtime) cacheEpisodeRuntimes(meta, s.season_number, [ep]);
       refresh();
       refreshHead();
     });
@@ -542,6 +729,7 @@ function seasonBlock(meta, detail, s, onChange) {
     try {
       const data = await api.season(meta.tmdbId, s.season_number);
       epList = data.episodes || [];
+      cacheEpisodeRuntimes(meta, s.season_number, epList);
     } catch {
       sp.remove();
       body.appendChild(h('<p style="padding:12px 14px;color:var(--text-muted);font-size:13px">Episodes indisponibles hors ligne.</p>'));
@@ -571,13 +759,13 @@ function seasonBlock(meta, detail, s, onChange) {
     for (const ep of epList) body.appendChild(epRow(ep));
   }
 
-  head.addEventListener('click', () => {
+  toggles.forEach((btn) => btn.addEventListener('click', () => {
     if (body.hidden) openBody();
     else {
       body.hidden = true;
       block.classList.remove('open');
     }
-  });
+  }));
 
   return block;
 }
@@ -600,7 +788,7 @@ export function renderWatchlist() {
       <button class="chip" data-f="anime">Animes</button>
     </div>
   `);
-  const list = h('<div></div>');
+  const list = h('<div class="media-list"></div>');
   page.append(chips, list);
 
   let filter = 'all';
@@ -670,7 +858,7 @@ export function renderPlaylists() {
   bindBack(page);
   v.appendChild(page);
 
-  const list = h('<div style="margin-top:8px"></div>');
+  const list = h('<div class="media-list" style="margin-top:8px"></div>');
   page.appendChild(list);
 
   function draw() {
@@ -774,7 +962,7 @@ export function renderPlaylist(id) {
     });
   });
 
-  const list = h('<div></div>');
+  const list = h('<div class="media-list"></div>');
   page.appendChild(list);
 
   function draw() {
@@ -809,25 +997,19 @@ export function renderProfile() {
   page.appendChild(pageHead('Profil'));
   v.appendChild(page);
 
-  const items = [...state.items.values()];
-  const moviesSeen = items.filter((i) => i.type === 'movie' && i.plays > 0);
-  const moviePlays = moviesSeen.reduce((a, i) => a + i.plays, 0);
-  const tvStartedItems = items.filter((i) => i.type === 'tv' && watchedEpisodeCount(i) > 0);
-  const epsSeen = tvStartedItems.reduce((a, i) => a + watchedEpisodeCount(i), 0);
-  const epPlays = tvStartedItems.reduce((a, i) => a + totalEpisodePlays(i), 0);
-  const favs = items.filter((i) => i.favorite).length;
-  const rewatches = (moviePlays - moviesSeen.length) + (epPlays - epsSeen);
+  const s = computeStats();
 
-  page.appendChild(h(`
+  const statsEl = h(`
     <div class="stats-grid">
-      <div class="stat hl"><div class="v">${moviesSeen.length}</div><div class="l">Films vus</div></div>
-      <div class="stat hl"><div class="v">${tvStartedItems.length}</div><div class="l">Series suivies</div></div>
-      <div class="stat gr"><div class="v">${epsSeen}</div><div class="l">Episodes vus</div></div>
-      <div class="stat gr"><div class="v">${rewatches}</div><div class="l">Revisionnages</div></div>
-      <div class="stat"><div class="v">${favs}</div><div class="l">Favoris</div></div>
-      <div class="stat"><div class="v">${state.playlists.size}</div><div class="l">Playlists</div></div>
+      <a class="stat hl" href="#/library/movies-seen"><div class="v">${s.moviesSeen.length}</div><div class="l">Films vus</div></a>
+      <a class="stat hl" href="#/library/series-followed"><div class="v">${s.tvStarted.length}</div><div class="l">Series suivies</div></a>
+      <a class="stat gr" href="#/stats"><div class="v">${s.epsSeen}</div><div class="l">Episodes vus</div></a>
+      <a class="stat gr" href="#/stats"><div class="v">${s.rewatches}</div><div class="l">Revisionnages</div></a>
+      <a class="stat" href="#/library/favorites"><div class="v">${s.favs.length}</div><div class="l">Favoris</div></a>
+      <a class="stat" href="#/playlists"><div class="v">${state.playlists.size}</div><div class="l">Playlists</div></a>
     </div>
-  `));
+  `);
+  page.appendChild(statsEl);
 
   const settings = h('<div class="settings-list"></div>');
   page.appendChild(settings);
@@ -835,6 +1017,7 @@ export function renderProfile() {
   const links = [
     ['bookmark', 'Ma watchlist', () => (location.hash = '#/watchlist')],
     ['list', 'Mes playlists', () => (location.hash = '#/playlists')],
+    ['popcorn', 'Mes statistiques', () => (location.hash = '#/stats')],
     ['download', 'Exporter mes donnees (JSON)', doExport],
     ['upload', 'Importer une sauvegarde', doImport],
   ];
@@ -906,29 +1089,44 @@ export function renderSearch() {
       <input type="search" placeholder="Film, serie, anime..." autocomplete="off" enterkeyhint="search">
     </div>
   `);
+  const suggestTitle = h('<h2 class="search-suggest-title">Tendances</h2>');
   const results = h('<div class="grid"></div>');
-  page.append(bar, results);
+  page.append(bar, suggestTitle, results);
 
   const input = bar.querySelector('input');
   let timer = null;
   let seq = 0;
 
-  function draw(list) {
+  function draw(list, showTitle = false) {
     results.innerHTML = '';
+    suggestTitle.style.display = showTitle ? '' : 'none';
     if (!list.length) {
       if (input.value.trim()) results.appendChild(emptyState('search', 'Aucun resultat', 'Essaie une autre orthographe.'));
       return;
     }
-    for (const m of list) {
+    const usable = list.length - (list.length % 3);
+    for (const m of list.slice(0, usable)) {
       if (m.media_type === 'person') continue;
-      const type = m.media_type;
-      results.appendChild(posterCard(m, { type, sub: [typeLabel(type, isAnime(m)), mediaYear(m)].filter(Boolean).join(' - ') }));
+      const mtype = m.media_type || (m.title ? 'movie' : 'tv');
+      results.appendChild(posterCard(m, { type: mtype, sub: [typeLabel(mtype, isAnime(m)), mediaYear(m)].filter(Boolean).join(' - ') }));
     }
+  }
+
+  async function loadSuggestions() {
+    try {
+      const [movies, tv] = await Promise.all([api.trending('movie'), api.trending('tv')]);
+      const mixed = [
+        ...movies.results.slice(0, 9),
+        ...tv.results.slice(0, 9),
+      ];
+      if (!input.value.trim()) draw(mixed, true);
+    } catch { /* hors ligne */ }
   }
 
   async function run(q) {
     const my = ++seq;
-    if (!q.trim()) { draw([]); return; }
+    if (!q.trim()) { loadSuggestions(); return; }
+    suggestTitle.style.display = 'none';
     try {
       const data = await api.search(q.trim());
       if (my !== seq) return;
@@ -948,10 +1146,116 @@ export function renderSearch() {
     if (e.key === 'Enter') { clearTimeout(timer); run(input.value); input.blur(); }
   });
 
-  // restaure la derniere recherche
+  // restaure la derniere recherche ou affiche les tendances
   if (searchLast.q) {
     input.value = searchLast.q;
     draw(searchLast.results);
+  } else {
+    loadSuggestions();
   }
   setTimeout(() => input.focus(), 80);
+}
+
+/* ============================== STATS ============================== */
+
+export async function renderStats() {
+  const v = $view();
+  v.innerHTML = '';
+  const page = h('<div class="page"></div>');
+  page.appendChild(pageHead('Statistiques', { back: true }));
+  bindBack(page);
+  v.appendChild(page);
+
+  const holder = h('<div></div>');
+  holder.appendChild(spinner());
+  page.appendChild(holder);
+
+  const tvItems = [...state.items.values()].filter((i) => i.type === 'tv' && watchedEpisodeCount(i) > 0);
+  await Promise.all(tvItems.map((it) =>
+    syncTvRuntimes({ type: 'tv', tmdbId: it.tmdbId }, it.tmdbId)
+  ));
+
+  const s = computeStats();
+  const animeEps = s.animes.filter((i) => i.type === 'tv').reduce((a, i) => a + watchedEpisodeCount(i), 0);
+  const animeMovies = s.animes.filter((i) => i.type === 'movie' && i.plays > 0).length;
+
+  holder.innerHTML = '';
+  holder.appendChild(h(`
+    <div class="stats-page">
+      <div class="stats-hero">
+        <div class="stats-hero-lbl">Temps total devant l'ecran</div>
+        <div class="stats-hero-val">${formatDuration(s.totalMinutes)}</div>
+        <div class="stats-hero-sub">Durees reelles TMDB par episode</div>
+      </div>
+      <div class="stats-breakdown">
+        <div class="stats-row"><span>Films</span><strong>${formatDuration(s.movieMinutes)}</strong></div>
+        <div class="stats-row"><span>Series</span><strong>${formatDuration(s.tvMinutes)}</strong></div>
+        <div class="stats-row"><span>Animes</span><strong>${formatDuration(s.animeMinutes)}</strong></div>
+      </div>
+      <div class="stats-grid stats-grid--detail">
+        <div class="stat"><div class="v">${s.moviesSeen.length}</div><div class="l">Films vus</div></div>
+        <div class="stat"><div class="v">${s.moviePlays}</div><div class="l">Visionnages films</div></div>
+        <div class="stat"><div class="v">${s.tvStarted.length}</div><div class="l">Series suivies</div></div>
+        <div class="stat"><div class="v">${s.epsSeen}</div><div class="l">Episodes vus</div></div>
+        <div class="stat"><div class="v">${animeMovies}</div><div class="l">Films anime vus</div></div>
+        <div class="stat"><div class="v">${animeEps}</div><div class="l">Ep. anime vus</div></div>
+        <div class="stat"><div class="v">${s.rewatches}</div><div class="l">Revisionnages</div></div>
+        <div class="stat"><div class="v">${s.favs.length}</div><div class="l">Favoris</div></div>
+      </div>
+    </div>
+  `));
+}
+
+/* ============================== BIBLIOTHEQUE FILTRE ============================== */
+
+const LIBRARY_CFG = {
+  'movies-seen': {
+    title: 'Films vus',
+    filter: (i) => i.type === 'movie' && !i.isAnime && i.plays > 0,
+    sub: (i) => `${i.plays} visionnage${i.plays > 1 ? 's' : ''}${i.year ? ' - ' + i.year : ''}`,
+  },
+  'series-followed': {
+    title: 'Series suivies',
+    filter: (i) => i.type === 'tv' && !i.isAnime && watchedEpisodeCount(i) > 0,
+    sub: (i) => {
+      const p = tvProgress(i);
+      return `${p.watched} ep. vu${p.watched > 1 ? 's' : ''}${p.total ? ' / ' + p.total : ''}`;
+    },
+  },
+  favorites: {
+    title: 'Favoris',
+    filter: (i) => i.favorite,
+    sub: (i) => [typeLabel(i.type, i.isAnime), i.year].filter(Boolean).join(' - '),
+  },
+};
+
+export function renderLibrary(name) {
+  const cfg = LIBRARY_CFG[name];
+  const v = $view();
+  v.innerHTML = '';
+  const page = h('<div class="page"></div>');
+  page.appendChild(pageHead(cfg?.title || 'Bibliotheque', { back: true }));
+  bindBack(page);
+  v.appendChild(page);
+
+  const list = h('<div class="media-list"></div>');
+  page.appendChild(list);
+
+  if (!cfg) {
+    list.appendChild(emptyState('list', 'Page introuvable'));
+    return;
+  }
+
+  const items = [...state.items.values()]
+    .filter(cfg.filter)
+    .sort((a, b) => b.updatedAt - a.updatedAt);
+
+  if (!items.length) {
+    list.appendChild(emptyState('popcorn', 'Rien ici pour le moment', 'Tes ajouts apparaitront ici.'));
+    return;
+  }
+
+  for (const it of items) {
+    list.appendChild(mediaListRow(it, { sub: cfg.sub(it) }));
+  }
 }

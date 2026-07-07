@@ -61,7 +61,23 @@ export const api = {
     }),
 
   detail: (type, id) =>
-    get(`/${type}/${id}`, { append_to_response: 'credits,recommendations' }),
+    get(`/${type}/${id}`, { append_to_response: 'credits,recommendations,keywords' }),
+
+  collection: (id) => get(`/collection/${id}`),
+
+  keywordMovies: (id, page = 1) =>
+    get(`/keyword/${id}/movies`, { page, sort_by: 'release_date.asc' }),
+
+  keywordTv: (id, page = 1) =>
+    get(`/keyword/${id}/tv`, { page, sort_by: 'first_air_date.asc' }),
+
+  discoverByCompany: (companyId, page = 1) =>
+    get('/discover/movie', {
+      with_companies: companyId,
+      sort_by: 'release_date.asc',
+      page,
+      'vote_count.gte': 50,
+    }),
 
   season: (tvId, num) => get(`/tv/${tvId}/season/${num}`),
 
