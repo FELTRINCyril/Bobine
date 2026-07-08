@@ -5,9 +5,17 @@ const IMG = 'https://image.tmdb.org/t/p/';
 
 const cache = new Map();
 
+// Langue du contenu TMDB (titres, synopsis...), reglable dans les parametres
+const LANG_KEY = 'bobine_lang';
+export const getLang = () => localStorage.getItem(LANG_KEY) || 'fr-FR';
+export function setLang(lang) {
+  localStorage.setItem(LANG_KEY, lang);
+  cache.clear();
+}
+
 async function get(path, params = {}) {
   const url = new URL(BASE + path);
-  url.searchParams.set('language', 'fr-FR');
+  url.searchParams.set('language', getLang());
   for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
   const key = url.toString();
   if (cache.has(key)) return cache.get(key);

@@ -1,6 +1,6 @@
 // Actions sur les items (favori, watchlist, vus, playlists)
 import {
-  ensureItem, saveItem, getItem, state, isSeen,
+  ensureItem, saveItem, getItem, state,
   createPlaylist, savePlaylist,
 } from './db.js';
 import { api } from './api.js';
@@ -102,102 +102,6 @@ export async function syncTvRuntimes(meta, tmdbId) {
       cacheEpisodeRuntimes(meta, sn, data.episodes || []);
     } catch { /* hors ligne */ }
   }
-}
-
-// Bascule vu / non vu sans passer par la fiche.
-// Pour une serie : marque toutes les saisons (via le detail TMDB).
-export async function toggleSeenQuick(meta) {
-  if (meta.type === 'movie') {
-    const cur = getItem('movie', meta.tmdbId)?.plays || 0;
-    await setMoviePlays(meta, cur > 0 ? 0 : 1);
-    return cur === 0;
-  }
-  const d = await api.detail('tv', meta.tmdbId);
-  const it = getItem('tv', meta.tmdbId);
-  const target = !(it && isSeen(it));
-  for (const s of d.seasons || []) {
-    if (s.season_number === 0) continue;
-    const eps = Array.from({ length: s.episode_count }, (_, i) => i + 1);
-    await markSeason(meta, s.season_number, eps, target ? 'all' : 'none');
-  }
-  updateItemTotals(meta, d);
-  if (target) syncTvRuntimes(meta, meta.tmdbId); // durees en arriere-plan
-  return target;
-}
-
-// ---- Sheet actions rapides (bouton + sur les affiches) ----
-
-export function openQuickSheet(meta, onChange) {
-  const box = h('<div></div>');
-  box.appendChild(h(`<h3 style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(meta.title)}</h3>`));
-  const list = h('<div></div>');
-  box.appendChild(list);
-  let busy = false;
-
-  const render = () => {
-    const it = getItem(meta.type, meta.tmdbId);
-    const seen = it ? isSeen(it) : false;
-    const mark = `<span class="mark">${I.check}</span>`;
-    list.innerHTML = '';
-
-    const rows = [
-      {
-        icon: seen ? I.check : I.eye,
-        label: seen ? 'Vu' : 'Marquer vu',
-        on: seen,
-        async run() {
-          if (busy) return;
-          busy = true;
-          try {
-            const nowSeen = await toggleSeenQuick(meta);
-            toast(nowSeen ? 'Marque comme vu' : 'Marque non vu');
-          } catch {
-            toast('Impossible (hors ligne ?)');
-          }
-          busy = false;
-        },
-      },
-      {
-        icon: it?.favorite ? I.heartFill : I.heart,
-        label: 'Favori',
-        on: !!it?.favorite,
-        run: () => toggleFavorite(meta),
-      },
-      {
-        icon: it?.watchlist ? I.bookmarkFill : I.bookmark,
-        label: 'Watchlist',
-        on: !!it?.watchlist,
-        run: () => toggleWatchlist(meta),
-      },
-      {
-        icon: I.plus,
-        label: 'Ajouter a une playlist',
-        on: false,
-        run: () => { openPlaylistSheet(meta, onChange); return 'keep'; },
-      },
-    ];
-
-    for (const r of rows) {
-      const btn = h(`
-        <button class="sheet-opt">
-          ${r.icon}
-          <span>${r.label}</span>
-          ${r.on ? mark : ''}
-        </button>
-      `);
-      btn.addEventListener('click', async () => {
-        const res = await r.run();
-        if (res !== 'keep') {
-          render();
-          onChange?.();
-        }
-      });
-      list.appendChild(btn);
-    }
-  };
-  render();
-
-  return openSheet(box);
 }
 
 // ---- Sheet playlists ----

@@ -29,6 +29,24 @@
   --font-body: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, sans-serif;
 }
 
+/* Theme clair (parametres > apparence) */
+:root[data-theme="light"] {
+  --bg: #f4f2f8;
+  --surface: #ffffff;
+  --surface-2: #eae7f1;
+  --surface-3: #d9d4e4;
+  --line: rgba(25, 12, 50, 0.09);
+  --text: #1a1424;
+  --text-muted: #6b6382;
+  --text-faint: #9b93b0;
+  --accent-soft: rgba(255, 61, 110, 0.1);
+  --seen: #119a63;
+  --seen-soft: rgba(17, 154, 99, 0.1);
+}
+
+:root[data-theme="light"] .tabbar { background: rgba(250, 248, 253, 0.9); }
+:root[data-theme="light"] .toast { color: #fff; background: #2a2438; }
+
 * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 
 html { height: 100%; overflow-x: hidden; }
@@ -85,6 +103,9 @@ input, textarea {
   from { opacity: 0; transform: translateY(6px); }
   to   { opacity: 1; transform: none; }
 }
+
+/* pose apres un swipe retour : pas d'animation d'entree, donc pas de flash */
+.page.no-anim { animation: none; }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.001s !important; transition-duration: 0.001s !important; }
@@ -285,7 +306,13 @@ input, textarea {
 
 .card-quick svg { width: 14px; height: 14px; }
 
-.card-quick:active { transform: scale(0.9); background: var(--accent); }
+.card-quick:active { transform: scale(0.9); }
+
+.card-quick.on {
+  background: var(--gold);
+  border-color: transparent;
+  color: #241a02;
+}
 
 /* Progression series (signature) */
 
@@ -881,7 +908,59 @@ a.genre:active {
   color: #06251a;
 }
 
+/* ---------- Casting ---------- */
+
+.cast-card { flex: none; width: 92px; }
+
+.cast-photo {
+  width: 84px;
+  height: 84px;
+  margin: 0 auto 7px;
+  border-radius: 50%;
+  overflow: hidden;
+  background: var(--surface-2);
+}
+
+.cast-photo img { width: 100%; height: 100%; object-fit: cover; }
+
+.cast-photo .no-img {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  place-items: center;
+  font-family: var(--font-display);
+  font-size: 20px;
+  color: var(--text-faint);
+}
+
+.grid .cast-card { width: auto; }
+
 /* ---------- Listes (watchlist / playlists) ---------- */
+
+/* En-tetes de section sticky (En cours / A voir / Vus) */
+.list-section-head {
+  position: sticky;
+  top: 0;
+  z-index: 6;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 10px var(--page-pad) 8px;
+  background: var(--bg);
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 17px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  border-bottom: 1px solid var(--line);
+}
+
+.list-section-head .cnt {
+  font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--accent);
+}
 
 .media-list {
   padding: 4px var(--page-pad) 12px;
@@ -1295,6 +1374,121 @@ a.stat:active { background: var(--surface-2); transform: scale(0.98); }
 }
 
 @keyframes spin { to { transform: rotate(360deg); } }
+
+/* Reserve la hauteur des rangees de l'accueil chargees au scroll,
+   pour que le declenchement anticipe fonctionne (sinon tout serait
+   dans la marge de l'observer des le depart) */
+.row-slot { min-height: 236px; }
+
+/* ---------- Boutons flottants lies au scroll ---------- */
+
+.float-search {
+  position: fixed;
+  top: calc(var(--safe-top) + 12px);
+  right: 14px;
+  z-index: 45;
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.35);
+  display: grid;
+  place-items: center;
+  color: var(--text);
+  opacity: 0;
+  transform: translateY(-8px);
+  pointer-events: none;
+  transition: opacity 0.18s ease, transform 0.18s ease;
+}
+
+.float-search svg { width: 19px; height: 19px; }
+
+.float-search.show {
+  opacity: 1;
+  transform: none;
+  pointer-events: auto;
+}
+
+.on-search .float-search { display: none; }
+
+.scrolltop {
+  position: fixed;
+  right: 14px;
+  bottom: calc(var(--tabbar-h) + var(--safe-bottom) + 16px);
+  z-index: 45;
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  box-shadow: 0 6px 20px rgba(255, 61, 110, 0.4);
+  display: grid;
+  place-items: center;
+  opacity: 0;
+  transform: translateY(10px);
+  pointer-events: none;
+  transition: opacity 0.18s ease, transform 0.18s ease;
+}
+
+.scrolltop svg { width: 18px; height: 18px; }
+
+.scrolltop.show {
+  opacity: 1;
+  transform: none;
+  pointer-events: auto;
+}
+
+.scrolltop:active { transform: scale(0.92); }
+
+/* ---------- Parametres ---------- */
+
+.settings-page { padding: 4px var(--page-pad) 20px; }
+
+.settings-title {
+  font-family: var(--font-display);
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  margin: 18px 0 10px;
+}
+
+.seg {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.seg-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 13px;
+  border-radius: var(--radius);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--text-muted);
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.seg-btn svg { width: 18px; height: 18px; }
+
+.seg-btn.on {
+  background: var(--accent-soft);
+  border-color: rgba(255, 61, 110, 0.35);
+  color: var(--accent);
+}
+
+.settings-note {
+  font-size: 12px;
+  color: var(--text-faint);
+  margin-top: 10px;
+  line-height: 1.5;
+}
 
 /* ---------- Verrou portrait ----------
    iOS ignore l'orientation du manifest pour les PWA : on masque l'app

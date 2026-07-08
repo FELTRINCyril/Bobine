@@ -10,7 +10,7 @@ export const I = {
   tv: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="18" height="13" rx="2"/><path d="m8 2 4 4 4-4"/></svg>',
   anime: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3c5 0 9 3.6 9 8s-4 8-9 8c-1 0-2-.14-2.9-.4L5 21l1-3.5C4.2 16 3 13.7 3 11c0-4.4 4-8 9-8Z"/><path d="M8.5 10.5h.01M15.5 10.5h.01M9.5 14s1 1 2.5 1 2.5-1 2.5-1"/></svg>',
   user: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-6.5 8-6.5s8 2.5 8 6.5"/></svg>',
-  search: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>',
+  search: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="11" cy="11" r="6.2"/><path d="m19.6 19.6-3.3-3.3"/></svg>',
   heart: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20.5s-7.5-4.7-9.3-9.2C1.3 7.7 3.6 4.5 7 4.5c2 0 3.6 1.1 5 3 1.4-1.9 3-3 5-3 3.4 0 5.7 3.2 4.3 6.8-1.8 4.5-9.3 9.2-9.3 9.2Z"/></svg>',
   heartFill: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 20.5s-7.5-4.7-9.3-9.2C1.3 7.7 3.6 4.5 7 4.5c2 0 3.6 1.1 5 3 1.4-1.9 3-3 5-3 3.4 0 5.7 3.2 4.3 6.8-1.8 4.5-9.3 9.2-9.3 9.2Z"/></svg>',
   bookmark: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12v18l-6-4.5L6 21V3Z"/></svg>',
@@ -29,8 +29,14 @@ export const I = {
   upload: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V4m0 0 4 4m-4-4-4 4"/><path d="M5 20h14"/></svg>',
   popcorn: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9 7.5 21h9L18 9"/><path d="M5 9h14"/><path d="M7 6a2.5 2.5 0 0 1 3.4-2.3A2.5 2.5 0 0 1 14 2.6 2.5 2.5 0 0 1 17.5 6"/><path d="M10 9l.7 12M14 9l-.7 12"/></svg>',
   play: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.14v14.72a1 1 0 0 0 1.5.86l11.02-7.36a1 1 0 0 0 0-1.72L9.5 4.28A1 1 0 0 0 8 5.14Z"/></svg>',
-  grid: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/></svg>',
-  rows: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="5" height="6" rx="1"/><path d="M12 6h8M12 9h5"/><rect x="4" y="14" width="5" height="6" rx="1"/><path d="M12 16h8M12 19h5"/></svg>',
+  grid: '<svg viewBox="0 0 24 24" fill="currentColor"><rect x="4.5" y="4.5" width="6.2" height="6.2" rx="2"/><rect x="13.3" y="4.5" width="6.2" height="6.2" rx="2"/><rect x="4.5" y="13.3" width="6.2" height="6.2" rx="2"/><rect x="13.3" y="13.3" width="6.2" height="6.2" rx="2"/></svg>',
+  rows: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M5 6.5h14M5 12h14M5 17.5h14"/></svg>',
+  settings: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3.2"/><path d="M19 12a7 7 0 0 0-.14-1.4l2-1.55-2-3.46-2.35.95a7 7 0 0 0-2.42-1.4L13.7 2.6h-3.4l-.39 2.54a7 7 0 0 0-2.42 1.4l-2.35-.95-2 3.46 2 1.55A7 7 0 0 0 5 12c0 .48.05.94.14 1.4l-2 1.55 2 3.46 2.35-.95a7 7 0 0 0 2.42 1.4l.39 2.54h3.4l.39-2.54a7 7 0 0 0 2.42-1.4l2.35.95 2-3.46-2-1.55c.09-.46.14-.92.14-1.4Z"/></svg>',
+  arrowUp: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5m0 0-6 6m6-6 6 6"/></svg>',
+  refresh: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11a8 8 0 1 0-2.34 6.06"/><path d="M20 5v6h-6"/></svg>',
+  sun: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.5v2.4M12 19.1v2.4M2.5 12h2.4M19.1 12h2.4M5 5l1.7 1.7M17.3 17.3 19 19M19 5l-1.7 1.7M6.7 17.3 5 19"/></svg>',
+  moon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.5 14.5A8.5 8.5 0 0 1 9.5 3.5a8.5 8.5 0 1 0 11 11Z"/></svg>',
+  globe: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.7 2.6 4 5.6 4 9s-1.3 6.4-4 9c-2.7-2.6-4-5.6-4-9s1.3-6.4 4-9Z"/></svg>',
   info: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 10v6M12 7h.01"/></svg>',
 };
 
@@ -103,7 +109,9 @@ export function posterCard(media, opts = {}) {
   const backdropPath = media.backdrop_path !== undefined ? media.backdrop_path : media.backdrop;
   const year = mediaYear(media) || media.year || '';
 
-  // data-q* : meta pour l'action rapide (bouton +), lue par app.js en delegation
+  const inWl = !!it?.watchlist;
+
+  // data-q* : meta pour le bouton watchlist rapide, lue par app.js en delegation
   return h(`
     <a class="card ${opts.wide ? 'card-lg' : ''}" href="#/detail/${type}/${id}"
        data-qtype="${type}" data-qid="${id}" data-qtitle="${esc(title)}"
@@ -112,11 +120,27 @@ export function posterCard(media, opts = {}) {
        data-qsub="${esc(sub)}">
       <div class="poster">
         ${badges}${imgHtml}${progress}
-        <button class="card-quick" type="button" aria-label="Actions rapides">${I.plus}</button>
+        <button class="card-quick ${inWl ? 'on' : ''}" type="button"
+                aria-label="${inWl ? 'Retirer de la watchlist' : 'Ajouter a la watchlist'}">
+          ${inWl ? I.bookmarkFill : I.plus}
+        </button>
       </div>
       <div class="card-title">${esc(title)}</div>
       ${sub ? `<div class="card-sub">${esc(sub)}</div>` : ''}
     </a>
+  `);
+}
+
+// ---- Carte acteur ----
+
+export function castCard(p) {
+  const src = img(p.profile_path, 'w185');
+  return h(`
+    <div class="cast-card">
+      <div class="cast-photo">${src ? `<img src="${src}" alt="" loading="lazy">` : `<span class="no-img">${esc((p.name || '?').split(' ').map((w) => w[0]).slice(0, 2).join(''))}</span>`}</div>
+      <div class="card-title" style="text-align:center">${esc(p.name || '')}</div>
+      ${p.character ? `<div class="card-sub" style="text-align:center">${esc(p.character)}</div>` : ''}
+    </div>
   `);
 }
 

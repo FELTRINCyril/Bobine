@@ -1,5 +1,6 @@
 // Vues / pages de l'app
-import { api, img, isAnime } from './api.js';
+import { api, img, isAnime, getLang, setLang } from './api.js';
+import { APP_VERSION } from './version.js';
 import {
   state, getItem, saveItem, isSeen, isStarted, tvProgress,
   watchedEpisodeCount, totalEpisodePlays, computeStats, formatDuration,
@@ -8,7 +9,7 @@ import {
 } from './db.js';
 import { findUniverse } from './universes.js';
 import {
-  h, esc, I, posterCard, openSheet, toast, emptyState, spinner,
+  h, esc, I, posterCard, castCard, openSheet, toast, emptyState, spinner,
   mediaTitle, mediaYear, mediaType, typeLabel, isReleased,
 } from './ui.js';
 import {
@@ -99,21 +100,39 @@ function mediaSection(title, medias, mediaType, listingId) {
   return section(title, row, link);
 }
 
-function homeFetchSection(body, title, fetcher, type, listingId) {
-  const holder = h('<div></div>');
-  holder.appendChild(spinner());
-  body.appendChild(section(title, holder, `#/listing/${listingId}`));
-  fetcher()
-    .then((data) => {
-      const results = (data.results || []).filter((m) => m.media_type !== 'person').slice(0, 20);
-      stashListing(listingId, title, type, results);
-      holder.innerHTML = '';
-      holder.appendChild(hRow(results.slice(0, 10), type));
-    })
-    .catch(() => {
-      holder.innerHTML = '';
-      holder.appendChild(emptyState('film', 'Hors ligne', 'Impossible de charger TMDB.'));
-    });
+// Section de l'accueil chargee en avance de phase pendant le scroll :
+// la requete part quand la section approche du viewport (marge 1400px),
+// donc le contenu est deja la quand elle devient visible.
+function homeFetchSection(body, title, fetcher, type, listingId, { lazy = false } = {}) {
+  const holder = h('<div class="row-slot"></div>');
+  const sec = section(title, holder, `#/listing/${listingId}`);
+  body.appendChild(sec);
+
+  const load = () => {
+    holder.appendChild(spinner());
+    fetcher()
+      .then((data) => {
+        const results = (data.results || []).filter((m) => m.media_type !== 'person').slice(0, 20);
+        stashListing(listingId, title, type, results);
+        holder.innerHTML = '';
+        holder.appendChild(hRow(results.slice(0, 10), type));
+      })
+      .catch(() => {
+        holder.innerHTML = '';
+        holder.appendChild(emptyState('film', 'Hors ligne', 'Impossible de charger TMDB.'));
+      });
+  };
+
+  if (!lazy || !('IntersectionObserver' in window)) {
+    load();
+    return;
+  }
+  const io = new IntersectionObserver((entries) => {
+    if (!entries.some((e) => e.isIntersecting)) return;
+    io.disconnect();
+    load();
+  }, { rootMargin: '1400px 0px' });
+  io.observe(sec);
 }
 
 // Reconstruit un pseudo-media TMDB depuis un item local (pour posterCard)
@@ -147,23 +166,30 @@ function itemStatus(it) {
   return 'todo';
 }
 
-function statusChips(onChange) {
-  const chips = h(`
-    <div class="chips">
-      <button class="chip on" data-s="all">Tout</button>
-      <button class="chip" data-s="todo">A voir</button>
-      <button class="chip" data-s="progress">En cours</button>
-      <button class="chip" data-s="seen">Vus</button>
-    </div>
-  `);
-  chips.addEventListener('click', (e) => {
-    const c = e.target.closest('.chip');
-    if (!c) return;
-    chips.querySelectorAll('.chip').forEach((x) => x.classList.remove('on'));
-    c.classList.add('on');
-    onChange(c.dataset.s);
-  });
-  return chips;
+// Rendu en sections "En cours / A voir / Vus" avec en-tetes sticky
+// (facon TV Time : tout est affiche, groupe par statut, et l'en-tete de la
+// section courante reste visible en haut pendant le scroll).
+const STATUS_ORDER = [
+  ['progress', 'En cours'],
+  ['todo', 'A voir'],
+  ['seen', 'Vus'],
+];
+
+function renderByStatus(holder, entries, statusOf, renderGroup) {
+  let any = false;
+  for (const [key, label] of STATUS_ORDER) {
+    const group = entries.filter((e) => statusOf(e) === key);
+    if (!group.length) continue;
+    any = true;
+    holder.appendChild(h(`
+      <div class="list-section-head">
+        <span>${label}</span>
+        <span class="cnt">${group.length}</span>
+      </div>
+    `));
+    holder.appendChild(renderGroup(group));
+  }
+  return any;
 }
 
 /* ============================== ACCUEIL ============================== */
@@ -254,34 +280,31 @@ export async function renderHome() {
     body.appendChild(section('Ma watchlist', row, '#/watchlist'));
   }
 
-  // Tendances (reseau)
+  // Rangees de contenu : les 2 premieres chargent tout de suite,
+  // le reste charge en avance de phase pendant le scroll.
   const slots = [
-    ['Tendances films', () => api.trending('movie'), 'movie', '#/movies'],
-    ['Tendances series', () => api.trending('tv'), 'tv', '#/series'],
+    ['Tendances films', () => api.trending('movie'), 'movie', 'trend-movies'],
+    ['Tendances series', () => api.trending('tv'), 'tv', 'trend-tv'],
     ['Top 10 Netflix - Films', () => api.discoverProvider('movie', 8), 'movie', 'netflix-movies'],
     ['Top 10 Netflix - Series', () => api.discoverProvider('tv', 8), 'tv', 'netflix-tv'],
     ['Populaire sur Disney+', () => api.discoverProvider('movie', 337), 'movie', 'disney-movies'],
     ['Populaire sur Prime Video', () => api.discoverProvider('movie', 119), 'movie', 'prime-movies'],
-    ['Animes populaires', () => api.discoverAnime(), 'tv', '#/anime'],
+    ['Populaire sur Apple TV+', () => api.discoverProvider('tv', 350), 'tv', 'apple-tv'],
+    ['Animes populaires', () => api.discoverAnime(), 'tv', 'anime-pop'],
+    ['Films d\'animation', () => api.discoverAnimeMovies(), 'movie', 'anime-movies'],
+    ['Action', () => api.discoverByGenre('movie', 28), 'movie', 'genre-action'],
+    ['Comedie', () => api.discoverByGenre('movie', 35), 'movie', 'genre-comedy'],
+    ['Science-Fiction', () => api.discoverByGenre('movie', 878), 'movie', 'genre-scifi'],
+    ['Horreur', () => api.discoverByGenre('movie', 27), 'movie', 'genre-horror'],
+    ['Thriller', () => api.discoverByGenre('movie', 53), 'movie', 'genre-thriller'],
+    ['Series comedie', () => api.discoverByGenre('tv', 35), 'tv', 'genre-tv-comedy'],
+    ['Series drame', () => api.discoverByGenre('tv', 18), 'tv', 'genre-tv-drama'],
+    ['Films les mieux notes', () => api.discoverMovies('vote_average.desc'), 'movie', 'top-movies'],
+    ['Series les mieux notees', () => api.discoverTv('vote_average.desc'), 'tv', 'top-tv'],
   ];
-  for (const [title, fetcher, type, link] of slots) {
-    if (link.startsWith('#/')) {
-      const holder = h('<div></div>');
-      holder.appendChild(spinner());
-      body.appendChild(section(title, holder, link));
-      fetcher()
-        .then((data) => {
-          holder.innerHTML = '';
-          holder.appendChild(hRow(data.results.slice(0, 12), type));
-        })
-        .catch(() => {
-          holder.innerHTML = '';
-          holder.appendChild(emptyState('film', 'Hors ligne', 'Impossible de charger TMDB.'));
-        });
-    } else {
-      homeFetchSection(body, title, fetcher, type, link);
-    }
-  }
+  slots.forEach(([title, fetcher, type, listingId], idx) => {
+    homeFetchSection(body, title, fetcher, type, listingId, { lazy: idx >= 2 });
+  });
 }
 
 /* ============================== CATALOGUES ============================== */
@@ -623,13 +646,29 @@ export async function renderDetail(type, id) {
   renderSeasons();
 
   // ---- Saga / Univers ----
-  loadSagaSections(page, d, type, id);
+  // holder dedie : les sections saga chargent en asynchrone mais doivent
+  // rester avant les recommandations et le casting
+  const sagaHolder = h('<div></div>');
+  page.appendChild(sagaHolder);
+  loadSagaSections(sagaHolder, d, type, id);
 
   // ---- Recommandations ----
   const recos = (d.recommendations?.results || []).filter((m) => m.media_type !== 'person').slice(0, 20);
   if (recos.length) {
     const sec = mediaSection('Recommandations', recos, type, `reco-${type}-${id}`);
     if (sec) page.appendChild(sec);
+  }
+
+  // ---- Casting (tout en bas de la fiche) ----
+  const cast = d.credits?.cast || [];
+  if (cast.length) {
+    const row = h('<div class="hscroll"><div class="hscroll-inner"></div></div>');
+    const inner = row.firstElementChild;
+    for (const p of cast.slice(0, 12)) inner.appendChild(castCard(p));
+    const link = cast.length > 12
+      ? stashListing(`cast-${type}-${id}`, `Casting - ${meta.title}`, 'cast', cast)
+      : null;
+    page.appendChild(section('Casting', row, link));
   }
 }
 
@@ -892,24 +931,8 @@ export function renderWatchlist() {
   const holder = h('<div></div>');
 
   let filter = 'all';
-  let status = 'all';
 
-  function draw() {
-    holder.innerHTML = '';
-    let items = [...state.items.values()].filter((i) => i.watchlist);
-    if (filter === 'movie') items = items.filter((i) => i.type === 'movie' && !i.isAnime);
-    if (filter === 'tv') items = items.filter((i) => i.type === 'tv' && !i.isAnime);
-    if (filter === 'anime') items = items.filter((i) => i.isAnime);
-    if (status !== 'all') items = items.filter((i) => itemStatus(i) === status);
-    items.sort((a, b) => b.updatedAt - a.updatedAt);
-
-    if (!items.length) {
-      holder.appendChild(emptyState('bookmark', 'Rien ici', status === 'all'
-        ? 'Ajoute des films et series a voir plus tard.'
-        : 'Aucun titre avec ce statut.'));
-      return;
-    }
-
+  function renderGroup(items) {
     if (getViewMode() === 'grid') {
       const grid = h('<div class="grid"></div>');
       for (const it of items) {
@@ -919,26 +942,39 @@ export function renderWatchlist() {
           sub: [typeLabel(it.type, it.isAnime), it.year].filter(Boolean).join(' - '),
         }));
       }
-      holder.appendChild(grid);
-    } else {
-      const list = h('<div class="media-list"></div>');
-      for (const it of items) {
-        list.appendChild(mediaListRow(it, {
-          btnIcon: I.x,
-          onBtn: async () => {
-            it.watchlist = false;
-            await saveItem(it);
-            toast('Retire de la watchlist');
-            draw();
-          },
-        }));
-      }
-      holder.appendChild(list);
+      return grid;
+    }
+    const list = h('<div class="media-list"></div>');
+    for (const it of items) {
+      list.appendChild(mediaListRow(it, {
+        btnIcon: I.x,
+        onBtn: async () => {
+          it.watchlist = false;
+          await saveItem(it);
+          toast('Retire de la watchlist');
+          draw();
+        },
+      }));
+    }
+    return list;
+  }
+
+  function draw() {
+    holder.innerHTML = '';
+    let items = [...state.items.values()].filter((i) => i.watchlist);
+    if (filter === 'movie') items = items.filter((i) => i.type === 'movie' && !i.isAnime);
+    if (filter === 'tv') items = items.filter((i) => i.type === 'tv' && !i.isAnime);
+    if (filter === 'anime') items = items.filter((i) => i.isAnime);
+    items.sort((a, b) => b.updatedAt - a.updatedAt);
+
+    const any = renderByStatus(holder, items, itemStatus, renderGroup);
+    if (!any) {
+      holder.appendChild(emptyState('bookmark', 'Watchlist vide', 'Ajoute des films et series a voir plus tard.'));
     }
   }
 
   page.querySelector('.head-actions').prepend(viewToggle(draw));
-  page.append(typeChips, statusChips((s) => { status = s; draw(); }), holder);
+  page.append(typeChips, holder);
 
   typeChips.querySelectorAll('.chip').forEach((c) =>
     c.addEventListener('click', () => {
@@ -1085,22 +1121,9 @@ export function renderPlaylist(id) {
   });
 
   const holder = h('<div></div>');
-  let status = 'all';
-  page.append(statusChips((s) => { status = s; draw(); }), holder);
+  page.appendChild(holder);
 
-  function draw() {
-    holder.innerHTML = '';
-    let entries = pl.items;
-    if (status !== 'all') {
-      entries = entries.filter((e) => itemStatus(state.items.get(e.id)) === status);
-    }
-
-    if (!entries.length) {
-      holder.appendChild(emptyState('list', status === 'all' ? 'Playlist vide' : 'Rien ici',
-        status === 'all' ? 'Ajoute des titres depuis leur fiche.' : 'Aucun titre avec ce statut.'));
-      return;
-    }
-
+  function renderGroup(entries) {
     if (getViewMode() === 'grid') {
       const grid = h('<div class="grid"></div>');
       for (const entry of entries) {
@@ -1110,22 +1133,29 @@ export function renderPlaylist(id) {
           { type: entry.type, sub: [typeLabel(entry.type, it?.isAnime), entry.year].filter(Boolean).join(' - ') }
         ));
       }
-      holder.appendChild(grid);
-    } else {
-      const list = h('<div class="media-list"></div>');
-      for (const entry of entries) {
-        const it = state.items.get(entry.id) || entry;
-        list.appendChild(mediaListRow({ ...entry, isAnime: it.isAnime }, {
-          btnIcon: I.x,
-          onBtn: async () => {
-            pl.items = pl.items.filter((x) => x.id !== entry.id);
-            await savePlaylist(pl);
-            toast('Retire de la playlist');
-            draw();
-          },
-        }));
-      }
-      holder.appendChild(list);
+      return grid;
+    }
+    const list = h('<div class="media-list"></div>');
+    for (const entry of entries) {
+      const it = state.items.get(entry.id) || entry;
+      list.appendChild(mediaListRow({ ...entry, isAnime: it.isAnime }, {
+        btnIcon: I.x,
+        onBtn: async () => {
+          pl.items = pl.items.filter((x) => x.id !== entry.id);
+          await savePlaylist(pl);
+          toast('Retire de la playlist');
+          draw();
+        },
+      }));
+    }
+    return list;
+  }
+
+  function draw() {
+    holder.innerHTML = '';
+    const any = renderByStatus(holder, pl.items, (e) => itemStatus(state.items.get(e.id)), renderGroup);
+    if (!any) {
+      holder.appendChild(emptyState('list', 'Playlist vide', 'Ajoute des titres depuis leur fiche.'));
     }
   }
   draw();
@@ -1161,6 +1191,7 @@ export function renderProfile() {
     ['bookmark', 'Ma watchlist', () => (location.hash = '#/watchlist')],
     ['list', 'Mes playlists', () => (location.hash = '#/playlists')],
     ['popcorn', 'Mes statistiques', () => (location.hash = '#/stats')],
+    ['settings', 'Parametres', () => (location.hash = '#/settings')],
     ['download', 'Exporter mes donnees (JSON)', doExport],
     ['upload', 'Importer une sauvegarde', doImport],
   ];
@@ -1449,11 +1480,116 @@ export function renderListing(id) {
   page.querySelector('.page-title').textContent = data.title;
   const type = data.type;
   const items = data.items;
+
+  if (type === 'cast') {
+    for (const p of items) grid.appendChild(castCard(p));
+    return;
+  }
+
   const count = items.length - (items.length % 3 || 0) || items.length;
   for (const m of items.slice(0, count)) {
     const t = type === 'mixed' ? (m.media_type || (m.title ? 'movie' : 'tv')) : type;
     grid.appendChild(posterCard(m, { type: t, sub: mediaYear(m) }));
   }
+}
+
+/* ============================== PARAMETRES ============================== */
+
+const THEME_KEY = 'bobine_theme';
+export const getTheme = () => localStorage.getItem(THEME_KEY) || 'dark';
+
+export function applyTheme(theme) {
+  localStorage.setItem(THEME_KEY, theme);
+  document.documentElement.dataset.theme = theme;
+  document.querySelector('meta[name="theme-color"]')
+    ?.setAttribute('content', theme === 'light' ? '#f4f2f8' : '#0c0a10');
+}
+
+async function checkForUpdate(statusEl) {
+  statusEl.textContent = 'Verification...';
+  if (!('serviceWorker' in navigator)) {
+    statusEl.textContent = 'Mise a jour non disponible dans ce navigateur.';
+    return;
+  }
+  try {
+    const reg = await navigator.serviceWorker.getRegistration();
+    if (!reg) {
+      statusEl.textContent = 'Mise a jour non disponible ici.';
+      return;
+    }
+    let found = false;
+    reg.addEventListener('updatefound', () => { found = true; }, { once: true });
+    await reg.update();
+    if (found || reg.installing || reg.waiting) {
+      statusEl.textContent = 'Mise a jour trouvee, installation...';
+      // le nouveau service worker prend la main puis on recharge
+      navigator.serviceWorker.addEventListener('controllerchange', () => location.reload(), { once: true });
+      setTimeout(() => location.reload(), 6000); // filet de securite
+    } else {
+      statusEl.textContent = `Vous etes deja a jour (version ${APP_VERSION}).`;
+    }
+  } catch {
+    statusEl.textContent = 'Verification impossible (hors ligne ?).';
+  }
+}
+
+export function renderSettings() {
+  const v = $view();
+  v.innerHTML = '';
+  const page = h('<div class="page"></div>');
+  page.appendChild(pageHead('Parametres', { back: true }));
+  bindBack(page);
+  v.appendChild(page);
+
+  const box = h('<div class="settings-page"></div>');
+  page.appendChild(box);
+
+  // ---- Apparence ----
+  box.appendChild(h('<h2 class="settings-title">Apparence</h2>'));
+  const themeSeg = h(`
+    <div class="seg">
+      <button class="seg-btn" data-t="dark">${I.moon}<span>Sombre</span></button>
+      <button class="seg-btn" data-t="light">${I.sun}<span>Clair</span></button>
+    </div>
+  `);
+  const syncTheme = () => themeSeg.querySelectorAll('.seg-btn')
+    .forEach((b) => b.classList.toggle('on', b.dataset.t === getTheme()));
+  syncTheme();
+  themeSeg.addEventListener('click', (e) => {
+    const b = e.target.closest('.seg-btn');
+    if (!b) return;
+    applyTheme(b.dataset.t);
+    syncTheme();
+  });
+  box.appendChild(themeSeg);
+
+  // ---- Langue du contenu ----
+  box.appendChild(h('<h2 class="settings-title">Langue du contenu</h2>'));
+  const langSeg = h(`
+    <div class="seg">
+      <button class="seg-btn" data-l="fr-FR">${I.globe}<span>Francais</span></button>
+      <button class="seg-btn" data-l="en-US">${I.globe}<span>English</span></button>
+    </div>
+  `);
+  const syncLang = () => langSeg.querySelectorAll('.seg-btn')
+    .forEach((b) => b.classList.toggle('on', b.dataset.l === getLang()));
+  syncLang();
+  langSeg.addEventListener('click', (e) => {
+    const b = e.target.closest('.seg-btn');
+    if (!b || b.dataset.l === getLang()) return;
+    setLang(b.dataset.l);
+    syncLang();
+    toast(b.dataset.l === 'fr-FR' ? 'Contenu en francais' : 'Content in English');
+  });
+  box.appendChild(langSeg);
+  box.appendChild(h('<p class="settings-note">Titres, synopsis et listes fournis par TMDB dans la langue choisie. Les textes de l\'app restent en francais.</p>'));
+
+  // ---- Mise a jour ----
+  box.appendChild(h('<h2 class="settings-title">Application</h2>'));
+  const updBtn = h(`<button class="set-row">${I.refresh}<span>Mettre a jour</span><span class="chev">${I.chevRight}</span></button>`);
+  const status = h(`<p class="settings-note">Version ${APP_VERSION}</p>`);
+  updBtn.addEventListener('click', () => checkForUpdate(status));
+  box.append(updBtn, status);
 }
 
 /* ============================== PARCOURIR PAR GENRE ============================== */
