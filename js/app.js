@@ -9,6 +9,8 @@ import {
   renderStats, renderLibrary, renderListing, renderBrowse,
   renderSettings, renderPerson, renderAdvanced, applyTheme, getTheme,
 } from './views.js';
+import { isConfigured } from './config.js';
+import { renderOnboarding } from './onboarding.js';
 
 const TABS = [
   { hash: '#/home', label: 'Accueil', icon: 'home' },
@@ -212,13 +214,25 @@ async function boot() {
     try { await navigator.storage.persist(); } catch { /* ignore */ }
   }
   await loadState();
-  if (!location.hash) location.hash = '#/home';
-  route();
-  window.addEventListener('hashchange', route);
+
+  // Premiere ouverture (aucun acces TMDB configure) : ecran d'onboarding.
+  // Le routing ne demarre qu'une fois l'acces valide.
+  if (!isConfigured()) {
+    renderOnboarding(startApp);
+  } else {
+    startApp();
+  }
 
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('sw.js').catch(() => {});
   }
+}
+
+function startApp() {
+  document.body.classList.remove('onboarding-on');
+  if (!location.hash) location.hash = '#/home';
+  route();
+  window.addEventListener('hashchange', route);
 }
 
 boot();

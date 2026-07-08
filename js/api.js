@@ -1,5 +1,7 @@
-// TMDB API - lecture seule, jeton v4
-const TOKEN = 'eyJhbGciOiJIUzI1NiJ9.eyJhdWQiOiI2Y2ZjMWMxYzE0MWJlZTQ2MzQ4MjViMGJmMGVhYTY2ZCIsIm5iZiI6MTc2NTczMDg1OC40OTgsInN1YiI6IjY5M2VlYTJhYzZlODlkNGJjOTVlMDEwYiIsInNjb3BlcyI6WyJhcGlfcmVhZCJdLCJ2ZXJzaW9uIjoxfQ.q82kBAs_M70_U2hSrd0Z-sNm1jzgNgoVHchhy03DPJ0';
+// Client TMDB - lecture seule. L'acces (cle perso ou proxy) est resolu au
+// runtime via config.js : aucun secret n'est ecrit dans ce fichier.
+import { getConfig, isV4Token } from './config.js';
+
 const BASE = 'https://api.themoviedb.org/3';
 const IMG = 'https://image.tmdb.org/t/p/';
 
@@ -14,17 +16,26 @@ export function setLang(lang) {
 }
 
 async function get(path, params = {}) {
-  const url = new URL(BASE + path);
+  const cfg = getConfig();
+  if (!cfg) throw new Error('TMDB non configure');
+  const root = cfg.mode === 'proxy' ? cfg.base : BASE;
+  const url = new URL(root + path);
   url.searchParams.set('language', getLang());
   for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
-  const key = url.toString();
-  if (cache.has(key)) return cache.get(key);
-  const res = await fetch(url, {
-    headers: { Authorization: `Bearer ${TOKEN}`, accept: 'application/json' },
-  });
+  // Cle de cache stable, independante du mode d'auth (et sans y stocker la cle)
+  const cacheKey = url.toString();
+  if (cache.has(cacheKey)) return cache.get(cacheKey);
+  // Mode cle perso : jeton v4 en Bearer, ou cle v3 en query. Mode proxy : le
+  // Worker ajoute l'auth cote serveur, rien a faire ici.
+  const headers = { accept: 'application/json' };
+  if (cfg.mode === 'key') {
+    if (isV4Token(cfg.key)) headers.Authorization = `Bearer ${cfg.key}`;
+    else url.searchParams.set('api_key', cfg.key);
+  }
+  const res = await fetch(url, { headers });
   if (!res.ok) throw new Error(`TMDB ${res.status} sur ${path}`);
   const data = await res.json();
-  cache.set(key, data);
+  cache.set(cacheKey, data);
   return data;
 }
 

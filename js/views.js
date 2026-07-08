@@ -9,6 +9,7 @@ import {
   exportJson, importJson, ensureItem,
 } from './db.js';
 import { findUniverse } from './universes.js';
+import { getConfig, resetConfig } from './config.js';
 import {
   h, esc, I, posterCard, castCard, openSheet, toast, emptyState, spinner,
   mediaTitle, mediaYear, mediaType, typeLabel, isReleased,
@@ -1630,6 +1631,18 @@ export function renderSettings() {
   });
   box.appendChild(langSeg);
   box.appendChild(h(`<p class="settings-note">${tr("Langue de l'app et du contenu TMDB (titres, synopsis, listes).")}</p>`));
+
+  // ---- Acces TMDB ----
+  box.appendChild(h(`<h2 class="settings-title">${tr('Acces TMDB')}</h2>`));
+  const cfg = getConfig();
+  const modeLabel = cfg?.mode === 'key' ? tr('Cle personnelle') : tr('Proxy');
+  box.appendChild(h(`<p class="settings-note">${tr('Mode actuel :')} ${modeLabel}</p>`));
+  const reconf = h(`<button class="set-row">${I.globe}<span>${tr("Reconfigurer l'acces")}</span><span class="chev">${I.chevRight}</span></button>`);
+  reconf.addEventListener('click', () => {
+    resetConfig();
+    location.reload();
+  });
+  box.appendChild(reconf);
 
   // ---- Mise a jour ----
   box.appendChild(h(`<h2 class="settings-title">${tr('Application')}</h2>`));

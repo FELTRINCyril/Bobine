@@ -2,7 +2,9 @@
 
 PWA mobile de suivi de films / series / animes (style TV Time).
 100% locale : les donnees restent sur l'appareil (IndexedDB), seul TMDB est
-appele pour les metadonnees (cle API en lecture seule dans `js/api.js`).
+appele pour les metadonnees. L'acces TMDB est configure au premier lancement
+(cle perso ou proxy) - aucun secret n'est stocke dans le depot. Voir
+`SECURITE.md`.
 
 ## Lancer en local
 
@@ -25,6 +27,9 @@ python3 -m http.server 8765
 - `css/app.css` - theme "salle obscure" (tokens en haut de fichier)
 - `js/app.js` - router (hash) + tab bar
 - `js/api.js` - client TMDB (+ detection anime : animation JP)
+- `js/config.js` - resolution de l'acces TMDB au runtime (cle perso / proxy)
+- `js/onboarding.js` - ecran de premiere ouverture (choix de l'acces)
+- `worker/` - proxy TMDB optionnel (Cloudflare Worker), voir son README
 - `js/db.js` - IndexedDB (items, playlists) + export/import JSON
 - `js/actions.js` - mutations (favori, watchlist, vus, playlists)
 - `js/views.js` - toutes les pages

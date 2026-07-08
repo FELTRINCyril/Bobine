@@ -215,6 +215,28 @@ const EN = {
   'Version': 'Version',
   'Verification impossible (hors ligne ?).': 'Could not check (offline?).',
 
+  // Onboarding / acces TMDB
+  'Bienvenue sur Bobine': 'Welcome to Bobine',
+  "Bobine a besoin d'un acces a TMDB pour afficher films et series. Tes donnees de visionnage restent, elles, 100% sur ton appareil.": 'Bobine needs access to TMDB to show movies and shows. Your watch data stays 100% on your device.',
+  'Commencer': 'Get started',
+  'Recommande : rien a configurer.': 'Recommended: nothing to set up.',
+  'Options avancees': 'Advanced options',
+  'Utiliser ma cle TMDB': 'Use my TMDB key',
+  'Coller la cle API ou le jeton TMDB...': 'Paste the TMDB API key or token...',
+  'Obtenir une cle TMDB': 'Get a TMDB key',
+  'Valider': 'Confirm',
+  'Utiliser un proxy': 'Use a proxy',
+  'Cloudflare Worker (voir SECURITE.md)': 'Cloudflare Worker (see SECURITE.md)',
+  "Colle d'abord ta cle.": 'Paste your key first.',
+  "Colle d'abord l'URL du proxy.": 'Paste the proxy URL first.',
+  'Acces refuse par TMDB. Verifie et reessaie.': 'Access refused by TMDB. Check and try again.',
+  'Impossible de contacter TMDB (hors ligne ?).': 'Could not reach TMDB (offline?).',
+  'Acces TMDB': 'TMDB access',
+  'Mode actuel :': 'Current mode:',
+  'Cle personnelle': 'Personal key',
+  'Proxy': 'Proxy',
+  "Reconfigurer l'acces": 'Reconfigure access',
+
   // Divers
   'sur': 'of',
   'Remonter en haut': 'Back to top',
