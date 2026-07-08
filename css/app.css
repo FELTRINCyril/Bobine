@@ -908,6 +908,134 @@ a.genre:active {
   color: #06251a;
 }
 
+/* Indicateur "fiche disponible en francais" */
+.vf-chip {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  color: var(--seen);
+  border: 1px solid rgba(61, 220, 151, 0.45);
+  border-radius: 5px;
+  padding: 1px 5px;
+  align-self: center;
+}
+
+/* ---------- Ou regarder (plateformes) ---------- */
+
+.providers { padding: 0 var(--page-pad); }
+
+.prov-group + .prov-group { margin-top: 12px; }
+
+.prov-label {
+  font-size: 11.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-faint);
+  margin-bottom: 8px;
+}
+
+.prov-row { display: flex; flex-wrap: wrap; gap: 8px; }
+
+.prov {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 5px 12px 5px 5px;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.prov img { width: 26px; height: 26px; border-radius: 7px; }
+
+.prov-credit {
+  margin-top: 10px;
+  font-size: 10.5px;
+  color: var(--text-faint);
+}
+
+/* ---------- Page personne (acteur) ---------- */
+
+.person-hero { text-align: center; padding: 4px var(--page-pad) 14px; }
+
+.person-photo {
+  width: 128px;
+  height: 128px;
+  margin: 0 auto 12px;
+  border-radius: 50%;
+  overflow: hidden;
+  background: var(--surface-2);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.4);
+}
+
+.person-photo img { width: 100%; height: 100%; object-fit: cover; }
+
+.person-photo .no-img {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  place-items: center;
+  font-family: var(--font-display);
+  font-size: 34px;
+  color: var(--text-faint);
+}
+
+.person-name {
+  font-family: var(--font-display);
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.person-sub { font-size: 12.5px; color: var(--text-muted); margin-top: 4px; }
+
+/* ---------- Recherche avancee ---------- */
+
+.search-bar-wrap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 8px var(--page-pad);
+}
+
+.search-bar-wrap .search-bar { flex: 1; margin: 0; }
+
+.adv-btn { background: var(--surface-2); }
+
+.adv-form { padding: 0 var(--page-pad) 8px; }
+
+.adv-form .chips { padding-left: 0; padding-right: 0; }
+
+.chips-wrap { flex-wrap: wrap; overflow: visible; }
+
+.seg.seg-3 { grid-template-columns: 1fr 1fr 1fr; }
+
+.adv-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+
+.adv-pair .sheet-input { margin: 0; }
+
+.adv-form .sheet-input { margin: 0 0 6px; }
+
+.adv-sel:empty { display: none; }
+
+.adv-sugg { display: flex; flex-direction: column; }
+
+.adv-sugg-item {
+  text-align: left;
+  padding: 10px 12px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-top: none;
+  font-size: 14px;
+}
+
+.adv-sugg-item:first-child { border-top: 1px solid var(--line); border-radius: var(--radius-sm) var(--radius-sm) 0 0; }
+.adv-sugg-item:last-child { border-radius: 0 0 var(--radius-sm) var(--radius-sm); }
+.adv-sugg-item:active { background: var(--surface-2); }
+
 /* ---------- Casting ---------- */
 
 .cast-card { flex: none; width: 92px; }

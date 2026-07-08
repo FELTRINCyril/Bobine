@@ -1,12 +1,13 @@
 // Bobine - point d'entree : router + tab bar
 import { loadState } from './db.js';
 import { h, I, posterCard } from './ui.js';
+import { tr } from './i18n.js';
 import { toggleWatchlist } from './actions.js';
 import {
   renderHome, renderCatalog, renderDetail, renderWatchlist,
   renderPlaylists, renderPlaylist, renderProfile, renderSearch,
   renderStats, renderLibrary, renderListing, renderBrowse,
-  renderSettings, applyTheme, getTheme,
+  renderSettings, renderPerson, renderAdvanced, applyTheme, getTheme,
 } from './views.js';
 
 const TABS = [
@@ -23,7 +24,7 @@ function buildTabbar() {
     bar.appendChild(h(`
       <a class="tab" href="${t.hash}" data-hash="${t.hash}">
         ${I[t.icon]}
-        <span>${t.label}</span>
+        <span>${tr(t.label)}</span>
       </a>
     `));
   }
@@ -40,15 +41,62 @@ const scrollPos = new Map();
 let currentHash = '';
 let skipPageAnim = false; // pose par le swipe retour pour eviter le flash
 
+// Cache des pages rendues : en revenant en arriere, on restaure le DOM tel
+// quel (donnees "Charger plus" comprises, position de scroll comprise) au
+// lieu de re-rendre -> pas de flash, pas de donnees perdues.
+// Seules les pages "reseau" sont cachees ; les pages locales (watchlist,
+// playlists, profil...) se re-rendent pour rester exactes.
+const pageCache = new Map(); // hash -> { el, y }
+const CACHEABLE = new Set(['home', 'movies', 'series', 'anime', 'detail', 'browse', 'listing', 'search', 'person', 'advanced']);
+const navStack = [];
+
+// Redessine les cartes d'une page restauree (badges vu/favori, bouton
+// watchlist) a partir de leurs data-attributes.
+function refreshCards(root) {
+  root.querySelectorAll('a.card[data-qid]').forEach((card) => {
+    const ds = card.dataset;
+    card.replaceWith(posterCard(
+      { id: Number(ds.qid), title: ds.qtitle, poster_path: ds.qposter || null, backdrop_path: ds.qbackdrop || null, year: ds.qyear, isAnime: ds.qanime === '1' },
+      { type: ds.qtype, sub: ds.qsub || '', noQuick: ds.qnoquick === '1' }
+    ));
+  });
+}
+
 function route() {
-  if (currentHash) scrollPos.set(currentHash, window.scrollY);
+  const view = document.getElementById('view');
   const hash = location.hash || '#/home';
-  currentHash = hash;
   const [, path, a, b, c] = hash.split('/'); // '#', path, args
+
+  // met de cote la page qu'on quitte
+  if (currentHash && currentHash !== hash) {
+    scrollPos.set(currentHash, window.scrollY);
+    const prevPath = currentHash.split('/')[1];
+    if (CACHEABLE.has(prevPath) && view.firstElementChild) {
+      pageCache.set(currentHash, { el: view.firstElementChild, y: window.scrollY });
+      while (pageCache.size > 8) pageCache.delete(pageCache.keys().next().value);
+    }
+  }
+
+  const isBack = navStack.length > 1 && navStack[navStack.length - 2] === hash;
+  if (isBack) navStack.pop();
+  else if (hash !== navStack[navStack.length - 1]) navStack.push(hash);
+  currentHash = hash;
 
   document.getElementById('overlay-root').innerHTML = '';
   syncTabbar(hash);
-  document.body.classList.toggle('on-search', path === 'search');
+  document.body.classList.toggle('on-search', path === 'search' || path === 'advanced');
+
+  // retour arriere vers une page en cache -> restauration a l'identique
+  const cached = isBack ? pageCache.get(hash) : null;
+  if (cached) {
+    pageCache.delete(hash);
+    skipPageAnim = false;
+    cached.el.classList.add('no-anim');
+    view.replaceChildren(cached.el);
+    refreshCards(cached.el);
+    requestAnimationFrame(() => window.scrollTo(0, cached.y));
+    return;
+  }
 
   switch (path) {
     case 'home': renderHome(); break;
@@ -66,6 +114,8 @@ function route() {
     case 'listing': renderListing(a); break;
     case 'browse': renderBrowse(a, Number(b), c); break;
     case 'settings': renderSettings(); break;
+    case 'person': renderPerson(Number(a)); break;
+    case 'advanced': renderAdvanced(); break;
     default: renderHome();
   }
 
@@ -134,8 +184,8 @@ function bindEdgeSwipeBack() {
 // UI liee au scroll : loupe flottante (reapparait quand on remonte)
 // et bouton "retour en haut" en bas a droite.
 function bindScrollUi() {
-  const toTop = h(`<button class="scrolltop" aria-label="Remonter en haut">${I.arrowUp}</button>`);
-  const floatSearch = h(`<a class="float-search" href="#/search" aria-label="Rechercher">${I.search}</a>`);
+  const toTop = h(`<button class="scrolltop" aria-label="${tr('Remonter en haut')}">${I.arrowUp}</button>`);
+  const floatSearch = h(`<a class="float-search" href="#/search" aria-label="${tr('Rechercher')}">${I.search}</a>`);
   document.body.append(toTop, floatSearch);
   toTop.addEventListener('click', () => window.scrollTo({ top: 0, behavior: 'smooth' }));
 
@@ -152,6 +202,8 @@ function bindScrollUi() {
 
 async function boot() {
   applyTheme(getTheme());
+  const rotateMsg = document.querySelector('#rotate-lock p');
+  if (rotateMsg) rotateMsg.innerHTML = `${tr('Bobine se regarde en portrait.')}<br>${tr('Remets ton telephone dans le bon sens !')}`;
   buildTabbar();
   bindQuickActions();
   bindEdgeSwipeBack();

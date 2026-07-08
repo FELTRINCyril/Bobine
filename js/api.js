@@ -88,7 +88,18 @@ export const api = {
     }),
 
   detail: (type, id) =>
-    get(`/${type}/${id}`, { append_to_response: 'credits,recommendations,keywords' }),
+    get(`/${type}/${id}`, {
+      append_to_response: 'credits,recommendations,keywords,translations,watch/providers',
+    }),
+
+  person: (id) => get(`/person/${id}`, { append_to_response: 'combined_credits' }),
+
+  searchPerson: (q) => get('/search/person', { query: q, include_adult: 'false' }),
+
+  searchKeyword: (q) => get('/search/keyword', { query: q }),
+
+  discover: (type, params, page = 1) =>
+    get(`/discover/${type}`, { ...params, page }),
 
   collection: (id) => get(`/collection/${id}`),
 

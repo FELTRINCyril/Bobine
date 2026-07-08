@@ -1,5 +1,6 @@
 // Vues / pages de l'app
 import { api, img, isAnime, getLang, setLang } from './api.js';
+import { tr, isEn } from './i18n.js';
 import { APP_VERSION } from './version.js';
 import {
   state, getItem, saveItem, isSeen, isStarted, tvProgress,
@@ -36,11 +37,11 @@ function pageHead(title, { back = false } = {}) {
   return h(`
     <div class="page-head">
       <div style="display:flex;align-items:center;gap:12px;min-width:0">
-        ${back ? `<button class="head-btn" data-nav="back" aria-label="Retour">${I.back}</button>` : ''}
+        ${back ? `<button class="head-btn" data-nav="back" aria-label="${tr('Retour')}">${I.back}</button>` : ''}
         <h1 class="page-title">${title}</h1>
       </div>
       <div class="head-actions">
-        <a class="head-btn" href="#/search" aria-label="Rechercher">${I.search}</a>
+        <a class="head-btn" href="#/search" aria-label="${tr('Rechercher')}">${I.search}</a>
       </div>
     </div>
   `);
@@ -72,7 +73,7 @@ function section(title, contentEl, linkHash) {
     <section class="section">
       <div class="section-head">
         <h2 class="section-title">${title}</h2>
-        ${linkHash ? `<a class="section-link" href="${linkHash}">Tout voir</a>` : ''}
+        ${linkHash ? `<a class="section-link" href="${linkHash}">${tr('Tout voir')}</a>` : ''}
       </div>
       <div class="section-pad"></div>
     </section>
@@ -119,7 +120,7 @@ function homeFetchSection(body, title, fetcher, type, listingId, { lazy = false 
       })
       .catch(() => {
         holder.innerHTML = '';
-        holder.appendChild(emptyState('film', 'Hors ligne', 'Impossible de charger TMDB.'));
+        holder.appendChild(emptyState('film', tr('Hors ligne'), tr('Impossible de charger TMDB.')));
       });
   };
 
@@ -183,7 +184,7 @@ function renderByStatus(holder, entries, statusOf, renderGroup) {
     any = true;
     holder.appendChild(h(`
       <div class="list-section-head">
-        <span>${label}</span>
+        <span>${tr(label)}</span>
         <span class="cnt">${group.length}</span>
       </div>
     `));
@@ -221,13 +222,13 @@ export async function renderHome() {
           <div class="cine-hero-shade"></div>
           <div class="cine-hero-top">
             <span class="cine-brand">Bobine<span class="tick">.</span></span>
-            <a class="head-btn cine-search" href="#/search" aria-label="Rechercher">${I.search}</a>
+            <a class="head-btn cine-search" href="#/search" aria-label="${tr('Rechercher')}">${I.search}</a>
           </div>
           <div class="cine-hero-content">
             <h2 class="cine-title">${esc(title)}</h2>
             ${overview ? `<p class="cine-desc">${esc(overview)}</p>` : ''}
             <div class="cine-actions">
-              <a class="cine-btn-play" href="${detailHash}">${I.play}<span>Voir la fiche</span></a>
+              <a class="cine-btn-play" href="${detailHash}">${I.play}<span>${tr('Voir la fiche')}</span></a>
               <a class="cine-btn-info" href="${detailHash}" aria-label="Plus d'infos">${I.info}</a>
             </div>
           </div>
@@ -256,13 +257,13 @@ export async function renderHome() {
           ${src ? `<img class="bg" src="${src}" alt="" loading="lazy">` : '<div class="bg"></div>'}
           <div class="info">
             <div class="t">${esc(it.title)}</div>
-            <div class="s">${p.watched} ep. vu${p.watched > 1 ? 's' : ''}${p.total ? ` sur ${p.total}` : ''}</div>
+            <div class="s">${p.watched} ep.${p.total ? ` ${tr('sur')} ${p.total}` : ''}</div>
             <div class="progress"><i style="width:${pct}%"></i></div>
           </div>
         </a>
       `));
     }
-    body.appendChild(section('Reprendre', row));
+    body.appendChild(section(tr('Reprendre'), row));
   }
 
   // Watchlist apercu
@@ -274,10 +275,10 @@ export async function renderHome() {
     const row = hRow([], 'movie');
     for (const it of wl) {
       row.querySelector('.hscroll-inner').appendChild(
-        posterCard(mediaFromItem(it), { type: it.type, sub: typeLabel(it.type, it.isAnime) })
+        posterCard(mediaFromItem(it), { type: it.type, sub: typeLabel(it.type, it.isAnime), noQuick: true })
       );
     }
-    body.appendChild(section('Ma watchlist', row, '#/watchlist'));
+    body.appendChild(section(tr('Ma watchlist'), row, '#/watchlist'));
   }
 
   // Rangees de contenu : les 2 premieres chargent tout de suite,
@@ -303,7 +304,7 @@ export async function renderHome() {
     ['Series les mieux notees', () => api.discoverTv('vote_average.desc'), 'tv', 'top-tv'],
   ];
   slots.forEach(([title, fetcher, type, listingId], idx) => {
-    homeFetchSection(body, title, fetcher, type, listingId, { lazy: idx >= 2 });
+    homeFetchSection(body, tr(title), fetcher, type, listingId, { lazy: idx >= 2 });
   });
 }
 
@@ -350,12 +351,12 @@ export async function renderCatalog(name) {
   const v = $view();
   v.innerHTML = '';
   const page = h('<div class="page"></div>');
-  page.appendChild(pageHead(cfg.title));
+  page.appendChild(pageHead(tr(cfg.title)));
 
   const chipsEl = h('<div class="chips"></div>');
   const grid = h('<div class="grid"></div>');
   const moreWrap = h('<div class="loadmore-wrap"></div>');
-  const more = h('<button class="btn ghost loadmore">Charger plus</button>');
+  const more = h(`<button class="btn ghost loadmore">${tr('Charger plus')}</button>`);
   moreWrap.appendChild(more);
   page.append(chipsEl, grid, moreWrap);
   v.appendChild(page);
@@ -384,10 +385,10 @@ export async function renderCatalog(name) {
       const count = items.length - (items.length % 3);
       if (!count) {
         grid.classList.add('grid--empty');
-        grid.appendChild(emptyState('popcorn', 'Rien ici pour le moment', 'Tes ajouts apparaitront ici.'));
+        grid.appendChild(emptyState('popcorn', tr('Rien ici pour le moment'), tr('Tes ajouts apparaitront ici.')));
       }
       for (const it of items.slice(0, count)) {
-        grid.appendChild(posterCard(mediaFromItem(it), { type: it.type, sub: typeLabel(it.type, it.isAnime) }));
+        grid.appendChild(posterCard(mediaFromItem(it), { type: it.type, sub: typeLabel(it.type, it.isAnime), noQuick: true }));
       }
       loading = false;
       return;
@@ -412,7 +413,7 @@ export async function renderCatalog(name) {
       moreWrap.style.display = pageNum >= data.total_pages ? 'none' : '';
       pageNum++;
     } catch {
-      grid.appendChild(emptyState('film', 'Hors ligne', 'Impossible de charger TMDB.'));
+      grid.appendChild(emptyState('film', tr('Hors ligne'), tr('Impossible de charger TMDB.')));
       moreWrap.style.display = 'none';
     }
     sp.remove();
@@ -420,7 +421,7 @@ export async function renderCatalog(name) {
   }
 
   for (const c of cfg.chips) {
-    const chip = h(`<button class="chip ${c === current ? 'on' : ''}">${c.label}</button>`);
+    const chip = h(`<button class="chip ${c === current ? 'on' : ''}">${tr(c.label)}</button>`);
     chip.addEventListener('click', () => {
       current = c;
       chipsEl.querySelectorAll('.chip').forEach((x) => x.classList.remove('on'));
@@ -448,8 +449,8 @@ export async function renderDetail(type, id) {
     d = await api.detail(type, id);
   } catch {
     page.innerHTML = '';
-    page.appendChild(pageHead('Oups', { back: true }));
-    page.appendChild(emptyState('film', 'Contenu indisponible', 'Verifie ta connexion et reessaie.'));
+    page.appendChild(pageHead(tr('Oups'), { back: true }));
+    page.appendChild(emptyState('film', tr('Contenu indisponible'), tr('Verifie ta connexion et reessaie.')));
     bindBack(page);
     return;
   }
@@ -476,7 +477,7 @@ export async function renderDetail(type, id) {
     <div class="detail-hero">
       ${backdrop ? `<img class="backdrop" src="${backdrop}" alt="">` : '<div class="backdrop" style="background:var(--surface-2)"></div>'}
       <div class="shade"></div>
-      <button class="head-btn" data-nav="back" aria-label="Retour">${I.back}</button>
+      <button class="head-btn" data-nav="back" aria-label="${tr('Retour')}">${I.back}</button>
     </div>
   `));
   bindBack(page);
@@ -484,9 +485,15 @@ export async function renderDetail(type, id) {
   const year = mediaYear(d);
   const runtime = type === 'movie'
     ? (d.runtime ? `${Math.floor(d.runtime / 60)}h${String(d.runtime % 60).padStart(2, '0')}` : '')
-    : `${d.number_of_seasons} saison${d.number_of_seasons > 1 ? 's' : ''} - ${d.number_of_episodes} ep.`;
+    : `${d.number_of_seasons} ${d.number_of_seasons > 1 ? tr('saisons') : tr('saison')} - ${d.number_of_episodes} ep.`;
   const note = d.vote_average ? d.vote_average.toFixed(1) : null;
   const poster = img(d.poster_path, 'w342');
+
+  // "VF" = fiche traduite en francais chez TMDB (titre/synopsis).
+  // TMDB ne connait pas le doublage audio : c'est un indicateur, pas une garantie.
+  const hasVF = (d.translations?.translations || []).some(
+    (t) => t.iso_639_1 === 'fr' && (t.data?.overview || t.data?.title || t.data?.name)
+  );
 
   page.appendChild(h(`
     <div class="detail-top">
@@ -498,6 +505,7 @@ export async function renderDetail(type, id) {
           ${year ? `<span>${year}</span>` : ''}
           ${runtime ? `<span>${runtime}</span>` : ''}
           <span>${typeLabel(type, meta.isAnime)}</span>
+          ${hasVF ? '<span class="vf-chip">VF</span>' : ''}
         </div>
       </div>
     </div>
@@ -538,12 +546,12 @@ export async function renderDetail(type, id) {
     const btns = [];
 
     if (released) {
-      const seenBtn = h(`<button class="act ${seen ? 'on-seen' : ''}">${seen ? I.check : I.eye}<span>${seen ? 'Vu' : 'Marquer vu'}</span></button>`);
+      const seenBtn = h(`<button class="act ${seen ? 'on-seen' : ''}">${seen ? I.check : I.eye}<span>${seen ? tr('Vu') : tr('Marquer vu')}</span></button>`);
       seenBtn.addEventListener('click', async () => {
         if (type === 'movie') {
           const cur = getItem(type, d.id)?.plays || 0;
           await setMoviePlays(meta, cur > 0 ? 0 : 1);
-          toast(cur > 0 ? 'Marque non vu' : 'Marque comme vu');
+          toast(cur > 0 ? tr('Marque non vu') : tr('Marque comme vu'));
         } else {
           const target = !seen;
           for (const s of d.seasons || []) {
@@ -553,7 +561,7 @@ export async function renderDetail(type, id) {
           }
           updateItemTotals(meta, d);
           await syncTvRuntimes(meta, d.id);
-          toast(target ? 'Serie marquee comme vue' : 'Serie marquee non vue');
+          toast(target ? tr('Serie marquee comme vue') : tr('Serie marquee non vue'));
           renderSeasons();
         }
         renderActions();
@@ -562,9 +570,9 @@ export async function renderDetail(type, id) {
       btns.push(seenBtn);
     }
 
-    const favBtn = h(`<button class="act ${fav ? 'on-fav' : ''}">${fav ? I.heartFill : I.heart}<span>Favori</span></button>`);
-    const wlBtn = h(`<button class="act ${wl ? 'on-list' : ''}">${wl ? I.bookmarkFill : I.bookmark}<span>Watchlist</span></button>`);
-    const plBtn = h(`<button class="act">${I.plus}<span>Playlist</span></button>`);
+    const favBtn = h(`<button class="act ${fav ? 'on-fav' : ''}">${fav ? I.heartFill : I.heart}<span>${tr('Favori')}</span></button>`);
+    const wlBtn = h(`<button class="act ${wl ? 'on-list' : ''}">${wl ? I.bookmarkFill : I.bookmark}<span>${tr('Watchlist')}</span></button>`);
+    const plBtn = h(`<button class="act">${I.plus}<span>${tr('Playlist')}</span></button>`);
 
     favBtn.addEventListener('click', async () => { await toggleFavorite(meta); renderActions(); });
     wlBtn.addEventListener('click', async () => { await toggleWatchlist(meta); renderActions(); });
@@ -582,7 +590,7 @@ export async function renderDetail(type, id) {
       if (!plays) return;
       const bar = h(`
         <div class="plays-bar">
-          <span class="lbl">Visionnages</span>
+          <span class="lbl">${tr('Visionnages')}</span>
           <div class="stepper">
             <button data-d="-1" aria-label="Moins">&minus;</button>
             <span class="val">${plays}</span>
@@ -604,8 +612,8 @@ export async function renderDetail(type, id) {
       const plays = it ? totalEpisodePlays(it) : 0;
       playsBarHolder.appendChild(h(`
         <div class="plays-bar ${plays ? '' : 'plays-bar--empty'}">
-          <span class="lbl">${p.watched}${p.total ? '/' + p.total : ''} ep. vus</span>
-          <span class="lbl plays-bar-extra">${plays ? `${plays} visionnage${plays > 1 ? 's' : ''}` : '&nbsp;'}</span>
+          <span class="lbl">${p.watched}${p.total ? '/' + p.total : ''} ep. ${tr('vus')}</span>
+          <span class="lbl plays-bar-extra">${plays ? `${plays} ${plays > 1 ? tr('visionnages') : tr('visionnage')}` : '&nbsp;'}</span>
         </div>
       `));
     }
@@ -617,14 +625,47 @@ export async function renderDetail(type, id) {
   // ---- Synopsis ----
   if (d.overview) {
     const ov = h(`<p class="overview clamp">${esc(d.overview)}</p>`);
-    const moreBtn = h('<button class="overview-more">Lire la suite</button>');
+    const moreBtn = h(`<button class="overview-more">${tr('Lire la suite')}</button>`);
     moreBtn.addEventListener('click', () => {
       const clamped = ov.classList.toggle('clamp');
-      moreBtn.textContent = clamped ? 'Lire la suite' : 'Reduire';
+      moreBtn.textContent = clamped ? tr('Lire la suite') : tr('Reduire');
     });
-    const s = section('Synopsis', ov);
+    const s = section(tr('Synopsis'), ov);
     s.querySelector('.section-pad').appendChild(moreBtn);
     page.appendChild(s);
+  }
+
+  // ---- Ou regarder (plateformes FR, donnees JustWatch via TMDB) ----
+  const fr = d['watch/providers']?.results?.FR;
+  if (fr) {
+    const dedup = (arr) => {
+      const seen = new Set();
+      return (arr || []).filter((p) => !seen.has(p.provider_id) && seen.add(p.provider_id));
+    };
+    const groups = [
+      [tr('Streaming'), dedup([...(fr.flatrate || []), ...(fr.free || []), ...(fr.ads || [])])],
+      [tr('Location / Achat'), dedup([...(fr.rent || []), ...(fr.buy || [])])],
+    ].filter(([, provs]) => provs.length);
+
+    if (groups.length) {
+      const box = h('<div class="providers"></div>');
+      for (const [label, provs] of groups) {
+        const grp = h(`<div class="prov-group"><div class="prov-label">${label}</div><div class="prov-row"></div></div>`);
+        const rowEl = grp.querySelector('.prov-row');
+        for (const p of provs.slice(0, 10)) {
+          const logo = img(p.logo_path, 'w92');
+          rowEl.appendChild(h(`
+            <div class="prov">
+              ${logo ? `<img src="${logo}" alt="" loading="lazy">` : ''}
+              <span>${esc(p.provider_name)}</span>
+            </div>
+          `));
+        }
+        box.appendChild(grp);
+      }
+      box.appendChild(h(`<p class="prov-credit">${tr('Source : JustWatch via TMDB (France)')}</p>`));
+      page.appendChild(section(tr('Ou regarder'), box));
+    }
   }
 
   // ---- Saisons (series) ----
@@ -635,7 +676,7 @@ export async function renderDetail(type, id) {
     if (type !== 'tv') return;
     seasonsHolder.innerHTML = '';
     const seasonBody = h('<div></div>');
-    const wrap = section('Episodes', seasonBody);
+    const wrap = section(tr('Episodes'), seasonBody);
     seasonsHolder.appendChild(wrap);
 
     for (const s of d.seasons || []) {
@@ -655,7 +696,7 @@ export async function renderDetail(type, id) {
   // ---- Recommandations ----
   const recos = (d.recommendations?.results || []).filter((m) => m.media_type !== 'person').slice(0, 20);
   if (recos.length) {
-    const sec = mediaSection('Recommandations', recos, type, `reco-${type}-${id}`);
+    const sec = mediaSection(tr('Recommandations'), recos, type, `reco-${type}-${id}`);
     if (sec) page.appendChild(sec);
   }
 
@@ -666,9 +707,9 @@ export async function renderDetail(type, id) {
     const inner = row.firstElementChild;
     for (const p of cast.slice(0, 12)) inner.appendChild(castCard(p));
     const link = cast.length > 12
-      ? stashListing(`cast-${type}-${id}`, `Casting - ${meta.title}`, 'cast', cast)
+      ? stashListing(`cast-${type}-${id}`, `${tr('Casting')} - ${meta.title}`, 'cast', cast)
       : null;
-    page.appendChild(section('Casting', row, link));
+    page.appendChild(section(tr('Casting'), row, link));
   }
 }
 
@@ -754,7 +795,7 @@ function seasonBlock(meta, detail, s, onChange) {
     <div class="season">
       <div class="season-head">
         <button class="season-toggle" type="button">
-          <span class="name">${esc(s.name || 'Saison ' + s.season_number)}</span>
+          <span class="name">${esc(s.name || tr('Saison') + ' ' + s.season_number)}</span>
           <span class="cnt"></span>
         </button>
         <button class="season-mark" type="button" aria-label="Marquer la saison vue">${I.check}</button>
@@ -801,7 +842,7 @@ function seasonBlock(meta, detail, s, onChange) {
     const nums = Array.from({ length: s.episode_count }, (_, i) => i + 1);
     if (allSeen) {
       await markSeason(meta, s.season_number, nums, 'none');
-      toast('Saison marquee non vue');
+      toast(tr('Saison marquee non vue'));
     } else {
       await markSeason(meta, s.season_number, nums, 'all');
       updateItemTotals(meta, detail);
@@ -826,7 +867,7 @@ function seasonBlock(meta, detail, s, onChange) {
       <div class="ep">
         <span class="num">${ep.episode_number}</span>
         <div class="ep-t">
-          <div class="n">${esc(ep.name || 'Episode ' + ep.episode_number)}</div>
+          <div class="n">${esc(ep.name || tr('Episode') + ' ' + ep.episode_number)}</div>
           ${ep.air_date ? `<div class="d">${ep.air_date.split('-').reverse().join('/')}</div>` : ''}
         </div>
         <button class="ep-plays" hidden aria-label="Ajouter un visionnage"></button>
@@ -872,16 +913,16 @@ function seasonBlock(meta, detail, s, onChange) {
       cacheEpisodeRuntimes(meta, s.season_number, epList);
     } catch {
       sp.remove();
-      body.appendChild(h('<p style="padding:12px 14px;color:var(--text-muted);font-size:13px">Episodes indisponibles hors ligne.</p>'));
+      body.appendChild(h('<p style="padding:12px 14px;color:var(--text-muted);font-size:13px">' + tr('Episodes indisponibles hors ligne.') + '</p>'));
       return;
     }
     sp.remove();
 
     const tools = h(`
       <div class="season-tools">
-        <button class="mini-btn seen">Tout marquer vu</button>
-        <button class="mini-btn seen">+1 revisionnage</button>
-        <button class="mini-btn">Tout effacer</button>
+        <button class="mini-btn seen">${tr('Tout marquer vu')}</button>
+        <button class="mini-btn seen">${tr('+1 revisionnage')}</button>
+        <button class="mini-btn">${tr('Tout effacer')}</button>
       </div>
     `);
     const [allBtn, reBtn, noneBtn] = tools.querySelectorAll('button');
@@ -892,7 +933,7 @@ function seasonBlock(meta, detail, s, onChange) {
       refreshHead();
     };
     allBtn.addEventListener('click', async () => { await markSeason(meta, s.season_number, nums(), 'all'); updateItemTotals(meta, detail); redraw(); toast('Saison marquee vue'); });
-    reBtn.addEventListener('click', async () => { await markSeason(meta, s.season_number, nums(), 'rewatch'); updateItemTotals(meta, detail); redraw(); toast('+1 visionnage sur la saison'); });
+    reBtn.addEventListener('click', async () => { await markSeason(meta, s.season_number, nums(), 'rewatch'); updateItemTotals(meta, detail); redraw(); toast(tr('+1 visionnage sur la saison')); });
     noneBtn.addEventListener('click', async () => { await markSeason(meta, s.season_number, nums(), 'none'); redraw(); });
     body.appendChild(tools);
 
@@ -916,16 +957,16 @@ export function renderWatchlist() {
   const v = $view();
   v.innerHTML = '';
   const page = h('<div class="page"></div>');
-  page.appendChild(pageHead('Watchlist', { back: true }));
+  page.appendChild(pageHead(tr('Watchlist'), { back: true }));
   bindBack(page);
   v.appendChild(page);
 
   const typeChips = h(`
     <div class="chips">
-      <button class="chip on" data-f="all">Tout</button>
-      <button class="chip" data-f="movie">Films</button>
-      <button class="chip" data-f="tv">Series</button>
-      <button class="chip" data-f="anime">Animes</button>
+      <button class="chip on" data-f="all">${tr('Tout')}</button>
+      <button class="chip" data-f="movie">${tr('Films')}</button>
+      <button class="chip" data-f="tv">${tr('Series')}</button>
+      <button class="chip" data-f="anime">${tr('Animes')}</button>
     </div>
   `);
   const holder = h('<div></div>');
@@ -939,6 +980,7 @@ export function renderWatchlist() {
         grid.appendChild(posterCard(mediaFromItem(it), {
           type: it.type,
           isAnime: it.isAnime,
+          noQuick: true,
           sub: [typeLabel(it.type, it.isAnime), it.year].filter(Boolean).join(' - '),
         }));
       }
@@ -951,7 +993,7 @@ export function renderWatchlist() {
         onBtn: async () => {
           it.watchlist = false;
           await saveItem(it);
-          toast('Retire de la watchlist');
+          toast(tr('Retire de la watchlist'));
           draw();
         },
       }));
@@ -969,7 +1011,7 @@ export function renderWatchlist() {
 
     const any = renderByStatus(holder, items, itemStatus, renderGroup);
     if (!any) {
-      holder.appendChild(emptyState('bookmark', 'Watchlist vide', 'Ajoute des films et series a voir plus tard.'));
+      holder.appendChild(emptyState('bookmark', tr('Watchlist vide'), tr('Ajoute des films et series a voir plus tard.')));
     }
   }
 
@@ -1011,7 +1053,7 @@ export function renderPlaylists() {
   const v = $view();
   v.innerHTML = '';
   const page = h('<div class="page"></div>');
-  page.appendChild(pageHead('Playlists', { back: true }));
+  page.appendChild(pageHead(tr('Playlists'), { back: true }));
   bindBack(page);
   v.appendChild(page);
 
@@ -1022,7 +1064,7 @@ export function renderPlaylists() {
     list.innerHTML = '';
     const pls = [...state.playlists.values()].sort((a, b) => a.createdAt - b.createdAt);
     if (!pls.length) {
-      list.appendChild(emptyState('list', 'Aucune playlist', 'Cree des collections : "A voir en famille", "Halloween"...'));
+      list.appendChild(emptyState('list', tr('Aucune playlist'), tr('Cree des collections : "A voir en famille", "Halloween"...')));
     }
     for (const pl of pls) {
       const covers = pl.items.slice(0, 3).map((x) => {
@@ -1034,18 +1076,18 @@ export function renderPlaylists() {
           <span class="pl-stack">${covers}</span>
           <span style="flex:1;min-width:0">
             <span class="t" style="display:block">${esc(pl.name)}</span>
-            <span class="s" style="display:block">${pl.items.length} titre${pl.items.length > 1 ? 's' : ''}</span>
+            <span class="s" style="display:block">${pl.items.length} ${pl.items.length > 1 ? tr('titres') : tr('titre')}</span>
           </span>
           <span style="color:var(--text-faint)">${I.chevRight}</span>
         </a>
       `);
       list.appendChild(card);
     }
-    const add = h(`<button class="btn ghost" style="margin:14px 18px 0;width:calc(100% - 36px)">${'Nouvelle playlist'}</button>`);
+    const add = h(`<button class="btn ghost" style="margin:14px 18px 0;width:calc(100% - 36px)">${tr('Nouvelle playlist')}</button>`);
     add.addEventListener('click', () => {
-      const box = h('<div><h3>Nouvelle playlist</h3></div>');
-      const input = h('<input class="sheet-input" placeholder="Nom de la playlist">');
-      const ok = h('<button class="btn">Creer</button>');
+      const box = h(`<div><h3>${tr('Nouvelle playlist')}</h3></div>`);
+      const input = h(`<input class="sheet-input" placeholder="${tr('Nom de la playlist')}">`);
+      const ok = h(`<button class="btn">${tr('Creer')}</button>`);
       box.append(input, ok);
       const close = openSheet(box);
       input.focus();
@@ -1071,20 +1113,20 @@ export function renderPlaylist(id) {
   v.appendChild(page);
 
   if (!pl) {
-    page.appendChild(pageHead('Playlist', { back: true }));
+    page.appendChild(pageHead(tr('Playlist'), { back: true }));
     bindBack(page);
-    page.appendChild(emptyState('list', 'Playlist introuvable'));
+    page.appendChild(emptyState('list', tr('Playlist introuvable')));
     return;
   }
 
   const head = h(`
     <div class="page-head">
       <div style="display:flex;align-items:center;gap:12px;min-width:0">
-        <button class="head-btn" data-nav="back" aria-label="Retour">${I.back}</button>
+        <button class="head-btn" data-nav="back" aria-label="${tr('Retour')}">${I.back}</button>
         <h1 class="page-title" style="font-size:24px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(pl.name)}</h1>
       </div>
       <div class="head-actions">
-        <button class="head-btn" data-act="menu" aria-label="Options">${I.edit}</button>
+        <button class="head-btn" data-act="menu" aria-label="${tr('Options')}">${I.edit}</button>
       </div>
     </div>
   `);
@@ -1094,13 +1136,13 @@ export function renderPlaylist(id) {
 
   head.querySelector('[data-act="menu"]').addEventListener('click', () => {
     const box = h(`<div><h3>${esc(pl.name)}</h3></div>`);
-    const rename = h(`<button class="sheet-opt">${I.edit}<span>Renommer</span></button>`);
-    const del = h(`<button class="sheet-opt accent">${I.trash}<span>Supprimer la playlist</span></button>`);
+    const rename = h(`<button class="sheet-opt">${I.edit}<span>${tr('Renommer')}</span></button>`);
+    const del = h(`<button class="sheet-opt accent">${I.trash}<span>${tr('Supprimer la playlist')}</span></button>`);
     box.append(rename, del);
     const close = openSheet(box);
     rename.addEventListener('click', () => {
       const input = h(`<input class="sheet-input" value="${esc(pl.name)}">`);
-      const ok = h('<button class="btn">Renommer</button>');
+      const ok = h(`<button class="btn">${tr('Renommer')}</button>`);
       box.append(input, ok);
       input.focus();
       ok.addEventListener('click', async () => {
@@ -1112,10 +1154,10 @@ export function renderPlaylist(id) {
       });
     });
     del.addEventListener('click', async () => {
-      if (!confirm(`Supprimer "${pl.name}" ?`)) return;
+      if (!confirm(`${tr('Supprimer')} "${pl.name}" ?`)) return;
       await deletePlaylist(id);
       close();
-      toast('Playlist supprimee');
+      toast(tr('Playlist supprimee'));
       location.hash = '#/playlists';
     });
   });
@@ -1130,7 +1172,7 @@ export function renderPlaylist(id) {
         const it = state.items.get(entry.id);
         grid.appendChild(posterCard(
           { id: entry.tmdbId, title: entry.title, poster_path: entry.poster, year: entry.year, isAnime: it?.isAnime },
-          { type: entry.type, sub: [typeLabel(entry.type, it?.isAnime), entry.year].filter(Boolean).join(' - ') }
+          { type: entry.type, noQuick: true, sub: [typeLabel(entry.type, it?.isAnime), entry.year].filter(Boolean).join(' - ') }
         ));
       }
       return grid;
@@ -1143,7 +1185,7 @@ export function renderPlaylist(id) {
         onBtn: async () => {
           pl.items = pl.items.filter((x) => x.id !== entry.id);
           await savePlaylist(pl);
-          toast('Retire de la playlist');
+          toast(tr('Retire de la playlist'));
           draw();
         },
       }));
@@ -1155,7 +1197,7 @@ export function renderPlaylist(id) {
     holder.innerHTML = '';
     const any = renderByStatus(holder, pl.items, (e) => itemStatus(state.items.get(e.id)), renderGroup);
     if (!any) {
-      holder.appendChild(emptyState('list', 'Playlist vide', 'Ajoute des titres depuis leur fiche.'));
+      holder.appendChild(emptyState('list', tr('Playlist vide'), tr('Ajoute des titres depuis leur fiche.')));
     }
   }
   draw();
@@ -1167,19 +1209,19 @@ export function renderProfile() {
   const v = $view();
   v.innerHTML = '';
   const page = h('<div class="page"></div>');
-  page.appendChild(pageHead('Profil'));
+  page.appendChild(pageHead(tr('Profil')));
   v.appendChild(page);
 
   const s = computeStats();
 
   const statsEl = h(`
     <div class="stats-grid">
-      <a class="stat hl" href="#/library/movies-seen"><div class="v">${s.moviesSeen.length}</div><div class="l">Films vus</div></a>
-      <a class="stat hl" href="#/library/series-followed"><div class="v">${s.tvStarted.length}</div><div class="l">Series suivies</div></a>
-      <a class="stat gr" href="#/stats"><div class="v">${s.epsSeen}</div><div class="l">Episodes vus</div></a>
-      <a class="stat gr" href="#/stats"><div class="v">${s.rewatches}</div><div class="l">Revisionnages</div></a>
-      <a class="stat" href="#/library/favorites"><div class="v">${s.favs.length}</div><div class="l">Favoris</div></a>
-      <a class="stat" href="#/playlists"><div class="v">${state.playlists.size}</div><div class="l">Playlists</div></a>
+      <a class="stat hl" href="#/library/movies-seen"><div class="v">${s.moviesSeen.length}</div><div class="l">${tr('Films vus')}</div></a>
+      <a class="stat hl" href="#/library/series-followed"><div class="v">${s.tvStarted.length}</div><div class="l">${tr('Series suivies')}</div></a>
+      <a class="stat gr" href="#/stats"><div class="v">${s.epsSeen}</div><div class="l">${tr('Episodes vus')}</div></a>
+      <a class="stat gr" href="#/stats"><div class="v">${s.rewatches}</div><div class="l">${tr('Revisionnages')}</div></a>
+      <a class="stat" href="#/library/favorites"><div class="v">${s.favs.length}</div><div class="l">${tr('Favoris')}</div></a>
+      <a class="stat" href="#/playlists"><div class="v">${state.playlists.size}</div><div class="l">${tr('Playlists')}</div></a>
     </div>
   `);
   page.appendChild(statsEl);
@@ -1188,24 +1230,24 @@ export function renderProfile() {
   page.appendChild(settings);
 
   const links = [
-    ['bookmark', 'Ma watchlist', () => (location.hash = '#/watchlist')],
-    ['list', 'Mes playlists', () => (location.hash = '#/playlists')],
-    ['popcorn', 'Mes statistiques', () => (location.hash = '#/stats')],
-    ['settings', 'Parametres', () => (location.hash = '#/settings')],
-    ['download', 'Exporter mes donnees (JSON)', doExport],
-    ['upload', 'Importer une sauvegarde', doImport],
+    ['bookmark', tr('Ma watchlist'), () => (location.hash = '#/watchlist')],
+    ['list', tr('Mes playlists'), () => (location.hash = '#/playlists')],
+    ['popcorn', tr('Mes statistiques'), () => (location.hash = '#/stats')],
+    ['settings', tr('Parametres'), () => (location.hash = '#/settings')],
+    ['download', tr('Exporter mes donnees (JSON)'), doExport],
+    ['upload', tr('Importer une sauvegarde'), doImport],
   ];
   for (const [icon, label, fn] of links) {
-    const row = h(`<button class="set-row">${I[icon]}<span>${label}</span><span class="chev">${I.chevRight}</span></button>`);
+    const row = h(`<button class="set-row">${I[icon]}<span>${tr(label)}</span><span class="chev">${I.chevRight}</span></button>`);
     row.addEventListener('click', fn);
     settings.appendChild(row);
   }
 
   page.appendChild(h(`
     <p class="credit">
-      Donnees stockees sur cet appareil (IndexedDB + copie de secours locale).<br>
-      Pour ne pas perdre tes donnees, exporte-les regulierement depuis ce menu.<br>
-      Ce produit utilise l'API TMDB mais n'est ni approuve ni certifie par TMDB.
+      ${tr('Donnees stockees sur cet appareil (IndexedDB + copie de secours locale).')}<br>
+      ${tr('Pour ne pas perdre tes donnees, exporte-les regulierement depuis ce menu.')}<br>
+      ${tr("Ce produit utilise l'API TMDB mais n'est ni approuve ni certifie par TMDB.")}
     </p>
   `));
 
@@ -1216,7 +1258,7 @@ export function renderProfile() {
     a.download = `bobine-${new Date().toISOString().slice(0, 10)}.json`;
     a.click();
     URL.revokeObjectURL(a.href);
-    toast('Export lance');
+    toast(tr('Export lance'));
   }
 
   function doImport() {
@@ -1228,10 +1270,10 @@ export function renderProfile() {
       if (!file) return;
       try {
         const res = await importJson(await file.text());
-        toast(`Importe : ${res.items} titres, ${res.playlists} playlists`);
+        toast(`${tr('Importe :')} ${res.items} ${tr('titres')}, ${res.playlists} ${tr('playlists')}`);
         renderProfile();
       } catch (e) {
-        toast('Import impossible : ' + e.message);
+        toast(tr('Import impossible :') + ' ' + e.message);
       }
     };
     input.click();
@@ -1251,22 +1293,26 @@ export function renderSearch() {
   page.appendChild(h(`
     <div class="page-head">
       <div style="display:flex;align-items:center;gap:12px">
-        <button class="head-btn" data-nav="back" aria-label="Retour">${I.back}</button>
-        <h1 class="page-title">Recherche</h1>
+        <button class="head-btn" data-nav="back" aria-label="${tr('Retour')}">${I.back}</button>
+        <h1 class="page-title">${tr('Recherche')}</h1>
       </div>
     </div>
   `));
   bindBack(page);
 
-  const bar = h(`
-    <div class="search-bar">
-      ${I.search}
-      <input type="search" placeholder="Film, serie, anime..." autocomplete="off" enterkeyhint="search">
+  const barWrap = h(`
+    <div class="search-bar-wrap">
+      <div class="search-bar">
+        ${I.search}
+        <input type="search" placeholder="${tr('Film, serie, anime...')}" autocomplete="off" enterkeyhint="search">
+      </div>
+      <a class="head-btn adv-btn" href="#/advanced" aria-label="${tr('Recherche avancee')}">${I.sliders}</a>
     </div>
   `);
-  const suggestTitle = h('<h2 class="search-suggest-title">Tendances</h2>');
+  const bar = barWrap.querySelector('.search-bar');
+  const suggestTitle = h(`<h2 class="search-suggest-title">${tr('Tendances')}</h2>`);
   const results = h('<div class="grid"></div>');
-  page.append(bar, suggestTitle, results);
+  page.append(barWrap, suggestTitle, results);
 
   const input = bar.querySelector('input');
   let timer = null;
@@ -1276,7 +1322,7 @@ export function renderSearch() {
     results.innerHTML = '';
     suggestTitle.style.display = showTitle ? '' : 'none';
     if (!list.length) {
-      if (input.value.trim()) results.appendChild(emptyState('search', 'Aucun resultat', 'Essaie une autre orthographe.'));
+      if (input.value.trim()) results.appendChild(emptyState('search', tr('Aucun resultat'), tr('Essaie une autre orthographe.')));
       return;
     }
     const usable = list.length - (list.length % 3);
@@ -1309,7 +1355,7 @@ export function renderSearch() {
       draw(data.results);
     } catch {
       results.innerHTML = '';
-      results.appendChild(emptyState('search', 'Hors ligne', "La recherche a besoin d'une connexion."));
+      results.appendChild(emptyState('search', tr('Hors ligne'), tr("La recherche a besoin d'une connexion.")));
     }
   }
 
@@ -1337,7 +1383,7 @@ export async function renderStats() {
   const v = $view();
   v.innerHTML = '';
   const page = h('<div class="page"></div>');
-  page.appendChild(pageHead('Statistiques', { back: true }));
+  page.appendChild(pageHead(tr('Statistiques'), { back: true }));
   bindBack(page);
   v.appendChild(page);
 
@@ -1358,24 +1404,24 @@ export async function renderStats() {
   holder.appendChild(h(`
     <div class="stats-page">
       <div class="stats-hero">
-        <div class="stats-hero-lbl">Temps total devant l'ecran</div>
+        <div class="stats-hero-lbl">${tr("Temps total devant l'ecran")}</div>
         <div class="stats-hero-val">${formatDuration(s.totalMinutes)}</div>
-        <div class="stats-hero-sub">Durees reelles TMDB par episode</div>
+        <div class="stats-hero-sub">${tr('Durees reelles TMDB par episode')}</div>
       </div>
       <div class="stats-breakdown">
-        <div class="stats-row"><span>Films</span><strong>${formatDuration(s.movieMinutes)}</strong></div>
-        <div class="stats-row"><span>Series</span><strong>${formatDuration(s.tvMinutes)}</strong></div>
-        <div class="stats-row"><span>Animes</span><strong>${formatDuration(s.animeMinutes)}</strong></div>
+        <div class="stats-row"><span>${tr('Films')}</span><strong>${formatDuration(s.movieMinutes)}</strong></div>
+        <div class="stats-row"><span>${tr('Series')}</span><strong>${formatDuration(s.tvMinutes)}</strong></div>
+        <div class="stats-row"><span>${tr('Animes')}</span><strong>${formatDuration(s.animeMinutes)}</strong></div>
       </div>
       <div class="stats-grid stats-grid--detail">
-        <div class="stat"><div class="v">${s.moviesSeen.length}</div><div class="l">Films vus</div></div>
-        <div class="stat"><div class="v">${s.moviePlays}</div><div class="l">Visionnages films</div></div>
-        <div class="stat"><div class="v">${s.tvStarted.length}</div><div class="l">Series suivies</div></div>
-        <div class="stat"><div class="v">${s.epsSeen}</div><div class="l">Episodes vus</div></div>
-        <div class="stat"><div class="v">${animeMovies}</div><div class="l">Films anime vus</div></div>
-        <div class="stat"><div class="v">${animeEps}</div><div class="l">Ep. anime vus</div></div>
-        <div class="stat"><div class="v">${s.rewatches}</div><div class="l">Revisionnages</div></div>
-        <div class="stat"><div class="v">${s.favs.length}</div><div class="l">Favoris</div></div>
+        <div class="stat"><div class="v">${s.moviesSeen.length}</div><div class="l">${tr('Films vus')}</div></div>
+        <div class="stat"><div class="v">${s.moviePlays}</div><div class="l">${tr('Visionnages films')}</div></div>
+        <div class="stat"><div class="v">${s.tvStarted.length}</div><div class="l">${tr('Series suivies')}</div></div>
+        <div class="stat"><div class="v">${s.epsSeen}</div><div class="l">${tr('Episodes vus')}</div></div>
+        <div class="stat"><div class="v">${animeMovies}</div><div class="l">${tr('Films anime vus')}</div></div>
+        <div class="stat"><div class="v">${animeEps}</div><div class="l">${tr('Ep. anime vus')}</div></div>
+        <div class="stat"><div class="v">${s.rewatches}</div><div class="l">${tr('Revisionnages')}</div></div>
+        <div class="stat"><div class="v">${s.favs.length}</div><div class="l">${tr('Favoris')}</div></div>
       </div>
     </div>
   `));
@@ -1387,14 +1433,14 @@ const LIBRARY_CFG = {
   'movies-seen': {
     title: 'Films vus',
     filter: (i) => i.type === 'movie' && !i.isAnime && i.plays > 0,
-    sub: (i) => `${i.plays} visionnage${i.plays > 1 ? 's' : ''}${i.year ? ' - ' + i.year : ''}`,
+    sub: (i) => `${i.plays} ${i.plays > 1 ? tr('visionnages') : tr('visionnage')}${i.year ? ' - ' + i.year : ''}`,
   },
   'series-followed': {
     title: 'Series suivies',
     filter: (i) => i.type === 'tv' && !i.isAnime && watchedEpisodeCount(i) > 0,
     sub: (i) => {
       const p = tvProgress(i);
-      return `${p.watched} ep. vu${p.watched > 1 ? 's' : ''}${p.total ? ' / ' + p.total : ''}`;
+      return `${p.watched} ep.${p.total ? ' / ' + p.total : ''}`;
     },
   },
   favorites: {
@@ -1409,7 +1455,7 @@ export function renderLibrary(name) {
   const v = $view();
   v.innerHTML = '';
   const page = h('<div class="page"></div>');
-  page.appendChild(pageHead(cfg?.title || 'Bibliotheque', { back: true }));
+  page.appendChild(pageHead(tr(cfg?.title || 'Bibliotheque'), { back: true }));
   bindBack(page);
   v.appendChild(page);
 
@@ -1417,7 +1463,7 @@ export function renderLibrary(name) {
   page.appendChild(holder);
 
   if (!cfg) {
-    holder.appendChild(emptyState('list', 'Page introuvable'));
+    holder.appendChild(emptyState('list', tr('Page introuvable')));
     return;
   }
 
@@ -1430,14 +1476,14 @@ export function renderLibrary(name) {
       .sort((a, b) => b.updatedAt - a.updatedAt);
 
     if (!items.length) {
-      holder.appendChild(emptyState('popcorn', 'Rien ici pour le moment', 'Tes ajouts apparaitront ici.'));
+      holder.appendChild(emptyState('popcorn', tr('Rien ici pour le moment'), tr('Tes ajouts apparaitront ici.')));
       return;
     }
 
     if (getViewMode() === 'grid') {
       const grid = h('<div class="grid"></div>');
       for (const it of items) {
-        grid.appendChild(posterCard(mediaFromItem(it), { type: it.type, sub: cfg.sub(it) }));
+        grid.appendChild(posterCard(mediaFromItem(it), { type: it.type, noQuick: true, sub: cfg.sub(it) }));
       }
       holder.appendChild(grid);
     } else {
@@ -1457,7 +1503,7 @@ export function renderListing(id) {
   const v = $view();
   v.innerHTML = '';
   const page = h('<div class="page"></div>');
-  page.appendChild(pageHead('Liste', { back: true }));
+  page.appendChild(pageHead(tr('Liste'), { back: true }));
   bindBack(page);
   v.appendChild(page);
 
@@ -1473,7 +1519,7 @@ export function renderListing(id) {
 
   if (!data?.items?.length) {
     grid.classList.add('grid--empty');
-    grid.appendChild(emptyState('list', 'Liste introuvable', 'Reviens en arriere et reessaie.'));
+    grid.appendChild(emptyState('list', tr('Liste introuvable'), tr('Reviens en arriere et reessaie.')));
     return;
   }
 
@@ -1506,30 +1552,30 @@ export function applyTheme(theme) {
 }
 
 async function checkForUpdate(statusEl) {
-  statusEl.textContent = 'Verification...';
+  statusEl.textContent = tr('Verification...');
   if (!('serviceWorker' in navigator)) {
-    statusEl.textContent = 'Mise a jour non disponible dans ce navigateur.';
+    statusEl.textContent = tr('Mise a jour non disponible dans ce navigateur.');
     return;
   }
   try {
     const reg = await navigator.serviceWorker.getRegistration();
     if (!reg) {
-      statusEl.textContent = 'Mise a jour non disponible ici.';
+      statusEl.textContent = tr('Mise a jour non disponible ici.');
       return;
     }
     let found = false;
     reg.addEventListener('updatefound', () => { found = true; }, { once: true });
     await reg.update();
     if (found || reg.installing || reg.waiting) {
-      statusEl.textContent = 'Mise a jour trouvee, installation...';
+      statusEl.textContent = tr('Mise a jour trouvee, installation...');
       // le nouveau service worker prend la main puis on recharge
       navigator.serviceWorker.addEventListener('controllerchange', () => location.reload(), { once: true });
       setTimeout(() => location.reload(), 6000); // filet de securite
     } else {
-      statusEl.textContent = `Vous etes deja a jour (version ${APP_VERSION}).`;
+      statusEl.textContent = `${tr('Vous etes deja a jour')} (${tr('version')} ${APP_VERSION}).`;
     }
   } catch {
-    statusEl.textContent = 'Verification impossible (hors ligne ?).';
+    statusEl.textContent = tr('Verification impossible (hors ligne ?).');
   }
 }
 
@@ -1537,7 +1583,7 @@ export function renderSettings() {
   const v = $view();
   v.innerHTML = '';
   const page = h('<div class="page"></div>');
-  page.appendChild(pageHead('Parametres', { back: true }));
+  page.appendChild(pageHead(tr('Parametres'), { back: true }));
   bindBack(page);
   v.appendChild(page);
 
@@ -1545,11 +1591,11 @@ export function renderSettings() {
   page.appendChild(box);
 
   // ---- Apparence ----
-  box.appendChild(h('<h2 class="settings-title">Apparence</h2>'));
+  box.appendChild(h(`<h2 class="settings-title">${tr('Apparence')}</h2>`));
   const themeSeg = h(`
     <div class="seg">
-      <button class="seg-btn" data-t="dark">${I.moon}<span>Sombre</span></button>
-      <button class="seg-btn" data-t="light">${I.sun}<span>Clair</span></button>
+      <button class="seg-btn" data-t="dark">${I.moon}<span>${tr('Sombre')}</span></button>
+      <button class="seg-btn" data-t="light">${I.sun}<span>${tr('Clair')}</span></button>
     </div>
   `);
   const syncTheme = () => themeSeg.querySelectorAll('.seg-btn')
@@ -1564,10 +1610,10 @@ export function renderSettings() {
   box.appendChild(themeSeg);
 
   // ---- Langue du contenu ----
-  box.appendChild(h('<h2 class="settings-title">Langue du contenu</h2>'));
+  box.appendChild(h(`<h2 class="settings-title">${tr('Langue')}</h2>`));
   const langSeg = h(`
     <div class="seg">
-      <button class="seg-btn" data-l="fr-FR">${I.globe}<span>Francais</span></button>
+      <button class="seg-btn" data-l="fr-FR">${I.globe}<span>${tr('Francais')}</span></button>
       <button class="seg-btn" data-l="en-US">${I.globe}<span>English</span></button>
     </div>
   `);
@@ -1579,15 +1625,16 @@ export function renderSettings() {
     if (!b || b.dataset.l === getLang()) return;
     setLang(b.dataset.l);
     syncLang();
-    toast(b.dataset.l === 'fr-FR' ? 'Contenu en francais' : 'Content in English');
+    // toute l'interface est traduite -> rechargement complet
+    location.reload();
   });
   box.appendChild(langSeg);
-  box.appendChild(h('<p class="settings-note">Titres, synopsis et listes fournis par TMDB dans la langue choisie. Les textes de l\'app restent en francais.</p>'));
+  box.appendChild(h(`<p class="settings-note">${tr("Langue de l'app et du contenu TMDB (titres, synopsis, listes).")}</p>`));
 
   // ---- Mise a jour ----
-  box.appendChild(h('<h2 class="settings-title">Application</h2>'));
-  const updBtn = h(`<button class="set-row">${I.refresh}<span>Mettre a jour</span><span class="chev">${I.chevRight}</span></button>`);
-  const status = h(`<p class="settings-note">Version ${APP_VERSION}</p>`);
+  box.appendChild(h(`<h2 class="settings-title">${tr('Application')}</h2>`));
+  const updBtn = h(`<button class="set-row">${I.refresh}<span>${tr('Mettre a jour')}</span><span class="chev">${I.chevRight}</span></button>`);
+  const status = h(`<p class="settings-note">${tr('Version')} ${APP_VERSION}</p>`);
   updBtn.addEventListener('click', () => checkForUpdate(status));
   box.append(updBtn, status);
 }
@@ -1614,13 +1661,13 @@ export async function renderBrowse(mediaType, genreId) {
   const page = h('<div class="page"></div>');
   const animeMode = mediaType === 'anime';
   const apiType = animeMode ? 'tv' : mediaType;
-  page.appendChild(pageHead('Chargement...', { back: true }));
+  page.appendChild(pageHead(tr('Chargement...'), { back: true }));
   bindBack(page);
   v.appendChild(page);
 
   const grid = h('<div class="grid"></div>');
   const moreWrap = h('<div class="loadmore-wrap"></div>');
-  const more = h('<button class="btn ghost loadmore">Charger plus</button>');
+  const more = h(`<button class="btn ghost loadmore">${tr('Charger plus')}</button>`);
   moreWrap.appendChild(more);
   page.append(grid, moreWrap);
 
@@ -1664,7 +1711,7 @@ export async function renderBrowse(mediaType, genreId) {
     } catch {
       if (!grid.children.length) {
         grid.classList.add('grid--empty');
-        grid.appendChild(emptyState('film', 'Hors ligne', 'Impossible de charger TMDB.'));
+        grid.appendChild(emptyState('film', tr('Hors ligne'), tr('Impossible de charger TMDB.')));
       }
       moreWrap.style.display = 'none';
     }
@@ -1674,4 +1721,384 @@ export async function renderBrowse(mediaType, genreId) {
 
   more.addEventListener('click', () => load(false));
   load(true);
+}
+
+/* ============================== PERSONNE (acteur) ============================== */
+
+export async function renderPerson(id) {
+  const v = $view();
+  v.innerHTML = '';
+  const page = h('<div class="page"></div>');
+  v.appendChild(page);
+  page.appendChild(spinner());
+
+  let p;
+  try {
+    p = await api.person(id);
+  } catch {
+    page.innerHTML = '';
+    page.appendChild(pageHead(tr('Oups'), { back: true }));
+    bindBack(page);
+    page.appendChild(emptyState('user', tr('Contenu indisponible'), tr('Verifie ta connexion et reessaie.')));
+    return;
+  }
+
+  page.innerHTML = '';
+  page.appendChild(pageHead('', { back: true }));
+  bindBack(page);
+
+  const photo = img(p.profile_path, 'w342');
+  page.appendChild(h(`
+    <div class="person-hero">
+      <div class="person-photo">${photo ? `<img src="${photo}" alt="">` : `<span class="no-img">${esc((p.name || '?').split(' ').map((w) => w[0]).slice(0, 2).join(''))}</span>`}</div>
+      <h1 class="person-name">${esc(p.name || '')}</h1>
+      ${p.birthday ? `<div class="person-sub">${p.birthday.split('-').reverse().join('/')}${p.place_of_birth ? ' - ' + esc(p.place_of_birth) : ''}</div>` : ''}
+    </div>
+  `));
+
+  if (p.biography) {
+    const bio = h(`<p class="overview clamp">${esc(p.biography)}</p>`);
+    const moreBtn = h(`<button class="overview-more">${tr('Lire la suite')}</button>`);
+    moreBtn.addEventListener('click', () => {
+      const clamped = bio.classList.toggle('clamp');
+      moreBtn.textContent = clamped ? tr('Lire la suite') : tr('Reduire');
+    });
+    page.append(bio, moreBtn);
+  }
+
+  // Filmographie (dedupliquee, du plus recent au plus ancien)
+  const seen = new Set();
+  const credits = (p.combined_credits?.cast || [])
+    .filter((c) => {
+      const key = `${c.media_type}_${c.id}`;
+      if (c.media_type !== 'movie' && c.media_type !== 'tv') return false;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .sort((a, b) => (b.popularity || 0) - (a.popularity || 0));
+
+  if (credits.length) {
+    const sec = h(`<section class="section"><div class="section-head"><h2 class="section-title">${tr('Filmographie')} (${credits.length})</h2></div></section>`);
+    const grid = h('<div class="grid"></div>');
+    for (const m of credits) {
+      grid.appendChild(posterCard(m, {
+        type: m.media_type,
+        sub: [typeLabel(m.media_type, isAnime(m)), mediaYear(m)].filter(Boolean).join(' - '),
+      }));
+    }
+    sec.appendChild(grid);
+    page.appendChild(sec);
+  }
+}
+
+/* ============================== RECHERCHE AVANCEE ============================== */
+
+const ADV_DEFAULT = () => ({
+  type: 'movie', genres: new Set(),
+  runtimeMin: '', runtimeMax: '', epMin: '', epMax: '',
+  yearMin: '', yearMax: '', noteMin: '', votesMin: '',
+  cast: [], keywords: [],
+});
+let advFilters = ADV_DEFAULT();
+
+// Selecteur a suggestions (acteurs, mots-cles)
+function advPicker(title, list, placeholder, searchFn) {
+  const wrap = h(`
+    <div>
+      <h2 class="settings-title">${title}</h2>
+      <div class="chips chips-wrap adv-sel"></div>
+      <input class="sheet-input" placeholder="${placeholder}" autocomplete="off">
+      <div class="adv-sugg"></div>
+    </div>
+  `);
+  const selEl = wrap.querySelector('.adv-sel');
+  const input = wrap.querySelector('input');
+  const sugg = wrap.querySelector('.adv-sugg');
+
+  const drawSel = () => {
+    selEl.innerHTML = '';
+    for (const it of list) {
+      const c = h(`<button class="chip on">${esc(it.name)} &#215;</button>`);
+      c.addEventListener('click', () => {
+        list.splice(list.indexOf(it), 1);
+        drawSel();
+      });
+      selEl.appendChild(c);
+    }
+  };
+  drawSel();
+
+  let timer;
+  input.addEventListener('input', () => {
+    clearTimeout(timer);
+    const q = input.value.trim();
+    if (!q) { sugg.innerHTML = ''; return; }
+    timer = setTimeout(async () => {
+      try {
+        const data = await searchFn(q);
+        sugg.innerHTML = '';
+        for (const r of (data.results || []).slice(0, 5)) {
+          const b = h(`<button class="adv-sugg-item">${esc(r.name)}</button>`);
+          b.addEventListener('click', () => {
+            if (!list.some((x) => x.id === r.id)) list.push({ id: r.id, name: r.name });
+            input.value = '';
+            sugg.innerHTML = '';
+            drawSel();
+          });
+          sugg.appendChild(b);
+        }
+      } catch { /* hors ligne */ }
+    }, 300);
+  });
+  return wrap;
+}
+
+function advPair(title, phA, phB, getA, setA, getB, setB) {
+  const wrap = h(`
+    <div>
+      <h2 class="settings-title">${title}</h2>
+      <div class="adv-pair">
+        <input class="sheet-input" type="number" inputmode="numeric" placeholder="${phA}" value="${getA()}">
+        <input class="sheet-input" type="number" inputmode="numeric" placeholder="${phB}" value="${getB()}">
+      </div>
+    </div>
+  `);
+  const [a, b] = wrap.querySelectorAll('input');
+  a.addEventListener('input', () => setA(a.value));
+  b.addEventListener('input', () => setB(b.value));
+  return wrap;
+}
+
+export function renderAdvanced() {
+  const v = $view();
+  v.innerHTML = '';
+  const page = h('<div class="page"></div>');
+  page.appendChild(pageHead(tr('Recherche avancee'), { back: true }));
+  bindBack(page);
+  v.appendChild(page);
+
+  const f = advFilters;
+  const form = h('<div class="adv-form"></div>');
+  page.appendChild(form);
+
+  // Type
+  form.appendChild(h(`<h2 class="settings-title">${tr('Type')}</h2>`));
+  const typeSeg = h(`
+    <div class="seg seg-3">
+      <button class="seg-btn" data-v="movie">${tr('Film')}</button>
+      <button class="seg-btn" data-v="tv">${tr('Serie')}</button>
+      <button class="seg-btn" data-v="anime">${tr('Anime')}</button>
+    </div>
+  `);
+  form.appendChild(typeSeg);
+
+  // Genres (charges selon le type)
+  form.appendChild(h(`<h2 class="settings-title">${tr('Genres')}</h2>`));
+  const genresEl = h('<div class="chips chips-wrap"></div>');
+  form.appendChild(genresEl);
+
+  async function renderGenres() {
+    genresEl.innerHTML = '';
+    const apiType = f.type === 'movie' ? 'movie' : 'tv';
+    let list = [];
+    try { list = (await api.genreList(apiType)).genres || []; } catch { /* hors ligne */ }
+    for (const g of list) {
+      if (f.type === 'anime' && g.id === 16) continue; // implicite pour les animes
+      const c = h(`<button class="chip ${f.genres.has(g.id) ? 'on' : ''}">${esc(g.name)}</button>`);
+      c.addEventListener('click', () => {
+        if (f.genres.has(g.id)) f.genres.delete(g.id);
+        else f.genres.add(g.id);
+        c.classList.toggle('on');
+      });
+      genresEl.appendChild(c);
+    }
+  }
+
+  // Duree (films) / nombre d'episodes (series et animes)
+  const durMovie = advPair(tr('Duree (minutes)'), tr('Min'), tr('Max'),
+    () => f.runtimeMin, (x) => (f.runtimeMin = x), () => f.runtimeMax, (x) => (f.runtimeMax = x));
+  const durTv = advPair(tr("Nombre d'episodes"), tr('Min'), tr('Max'),
+    () => f.epMin, (x) => (f.epMin = x), () => f.epMax, (x) => (f.epMax = x));
+  form.append(durMovie, durTv);
+
+  const syncType = () => {
+    typeSeg.querySelectorAll('.seg-btn').forEach((b) => b.classList.toggle('on', b.dataset.v === f.type));
+    durMovie.hidden = f.type !== 'movie';
+    durTv.hidden = f.type === 'movie';
+    renderGenres();
+  };
+  typeSeg.addEventListener('click', (e) => {
+    const b = e.target.closest('.seg-btn');
+    if (!b || b.dataset.v === f.type) return;
+    f.type = b.dataset.v;
+    f.genres.clear();
+    syncType();
+  });
+  syncType();
+
+  // Annee / note
+  form.appendChild(advPair(tr('Annee de sortie'), tr('De (annee)'), tr('A (annee)'),
+    () => f.yearMin, (x) => (f.yearMin = x), () => f.yearMax, (x) => (f.yearMax = x)));
+  form.appendChild(advPair(tr('Note'), tr('Note minimum (0-10)'), tr('Votes minimum'),
+    () => f.noteMin, (x) => (f.noteMin = x), () => f.votesMin, (x) => (f.votesMin = x)));
+
+  // Acteurs / mots-cles
+  form.appendChild(advPicker(tr('Acteurs'), f.cast, tr("Nom d'un acteur..."), api.searchPerson));
+  form.appendChild(advPicker(tr('Mots-cles'), f.keywords, tr('Mot-cle...'), api.searchKeyword));
+
+  // Actions
+  const goBtn = h(`<button class="btn" style="margin-top:18px">${tr('Rechercher')}</button>`);
+  const resetBtn = h(`<button class="btn ghost">${tr('Reinitialiser')}</button>`);
+  form.append(goBtn, resetBtn);
+  resetBtn.addEventListener('click', () => {
+    advFilters = ADV_DEFAULT();
+    renderAdvanced();
+  });
+
+  // Resultats
+  const resTitle = h('<h2 class="settings-title" style="display:none;padding:0 var(--page-pad)"></h2>');
+  const resGrid = h('<div class="grid"></div>');
+  page.append(resTitle, resGrid);
+  goBtn.addEventListener('click', () => {
+    runAdvanced(f, resTitle, resGrid);
+    resTitle.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
+}
+
+async function runAdvanced(f, titleEl, grid) {
+  titleEl.style.display = '';
+  titleEl.textContent = tr('Recherche en cours...');
+  grid.classList.remove('grid--empty');
+  grid.innerHTML = '';
+  grid.appendChild(spinner());
+
+  const apiType = f.type === 'movie' ? 'movie' : 'tv';
+
+  const matchFilters = (m) => {
+    const dstr = m.release_date || m.first_air_date || '';
+    const y = dstr ? Number(dstr.slice(0, 4)) : null;
+    if (f.yearMin && (!y || y < Number(f.yearMin))) return false;
+    if (f.yearMax && (!y || y > Number(f.yearMax))) return false;
+    if (f.noteMin && (m.vote_average || 0) < Number(f.noteMin)) return false;
+    if (f.votesMin && (m.vote_count || 0) < Number(f.votesMin)) return false;
+    const gids = m.genre_ids || (m.genres || []).map((g) => g.id);
+    for (const g of f.genres) if (!gids.includes(g)) return false;
+    if (f.type === 'anime' && !isAnime(m)) return false;
+    return true;
+  };
+
+  let results = [];
+  try {
+    if (f.cast.length) {
+      // Mode acteurs : filmographies croisees, les titres reunissant le plus
+      // d'acteurs choisis remontent en premier (ex: Enola Holmes avant
+      // Man of Steel pour Cavill + Millie Bobby Brown).
+      const people = await Promise.all(f.cast.map((c) => api.person(c.id)));
+      const buckets = new Map();
+      for (const person of people) {
+        const seenLocal = new Set();
+        for (const cr of person.combined_credits?.cast || []) {
+          if (cr.media_type !== apiType) continue;
+          const key = cr.id;
+          if (seenLocal.has(key)) continue;
+          seenLocal.add(key);
+          const cur = buckets.get(key) || { media: cr, count: 0 };
+          cur.count++;
+          buckets.set(key, cur);
+        }
+      }
+      results = [...buckets.values()]
+        .sort((a, b) => b.count - a.count || (b.media.popularity || 0) - (a.media.popularity || 0))
+        .map((x) => x.media)
+        .filter(matchFilters);
+    } else {
+      // Mode discover : requete precise (mots-cles ET) puis elargie (OU)
+      const params = { sort_by: 'popularity.desc', include_adult: 'false' };
+      const genres = [...f.genres];
+      if (f.type === 'anime') {
+        params.with_origin_country = 'JP';
+        genres.push(16);
+      }
+      if (genres.length) params.with_genres = genres.join(',');
+      const dateKey = apiType === 'movie' ? 'primary_release_date' : 'first_air_date';
+      if (f.yearMin) params[`${dateKey}.gte`] = `${f.yearMin}-01-01`;
+      if (f.yearMax) params[`${dateKey}.lte`] = `${f.yearMax}-12-31`;
+      if (apiType === 'movie') {
+        if (f.runtimeMin) params['with_runtime.gte'] = f.runtimeMin;
+        if (f.runtimeMax) params['with_runtime.lte'] = f.runtimeMax;
+      }
+      if (f.noteMin) params['vote_average.gte'] = f.noteMin;
+      if (f.votesMin) params['vote_count.gte'] = f.votesMin;
+
+      const kw = f.keywords.map((k) => k.id);
+      const variants = kw.length > 1 ? [kw.join(','), kw.join('|')] : kw.length ? [String(kw[0])] : [null];
+      const seen = new Set();
+      for (const vkw of variants) {
+        const pr = { ...params };
+        if (vkw) pr.with_keywords = vkw;
+        for (let pg = 1; pg <= 2; pg++) {
+          const data = await api.discover(apiType, pr, pg);
+          for (const m of data.results || []) {
+            if (seen.has(m.id)) continue;
+            seen.add(m.id);
+            if (matchFilters(m)) results.push(m);
+          }
+          if (pg >= (data.total_pages || 1)) break;
+        }
+      }
+    }
+
+    // Filtres qui demandent la fiche complete (duree en mode acteurs,
+    // nombre d'episodes, mots-cles en mode acteurs)
+    const needRuntime = apiType === 'movie' && f.cast.length && (f.runtimeMin || f.runtimeMax);
+    const needEpisodes = apiType === 'tv' && (f.epMin || f.epMax);
+    const needKeywords = f.cast.length && f.keywords.length;
+    if (needRuntime || needEpisodes || needKeywords) {
+      const top = results.slice(0, 30);
+      const details = await Promise.all(top.map((m) => api.detail(apiType, m.id).catch(() => null)));
+      const kwIds = f.keywords.map((k) => k.id);
+      const scored = [];
+      top.forEach((m, i) => {
+        const dd = details[i];
+        if (!dd) return;
+        if (needRuntime) {
+          if (f.runtimeMin && (dd.runtime || 0) < Number(f.runtimeMin)) return;
+          if (f.runtimeMax && (dd.runtime || 9999) > Number(f.runtimeMax)) return;
+        }
+        if (needEpisodes) {
+          const n = dd.number_of_episodes || 0;
+          if (f.epMin && n < Number(f.epMin)) return;
+          if (f.epMax && n > Number(f.epMax)) return;
+        }
+        let kwScore = 0;
+        if (needKeywords) {
+          const mediaKw = (dd.keywords?.keywords || dd.keywords?.results || []).map((k) => k.id);
+          kwScore = kwIds.filter((k) => mediaKw.includes(k)).length;
+        }
+        scored.push({ m, kwScore, order: i });
+      });
+      scored.sort((a, b) => b.kwScore - a.kwScore || a.order - b.order);
+      results = scored.map((x) => x.m);
+    }
+  } catch {
+    grid.innerHTML = '';
+    titleEl.textContent = tr('Hors ligne');
+    return;
+  }
+
+  results = results.slice(0, 60);
+  grid.innerHTML = '';
+  titleEl.textContent = `${tr('Resultats')} (${results.length})`;
+  if (!results.length) {
+    grid.classList.add('grid--empty');
+    grid.appendChild(emptyState('search', tr('Aucun resultat avec ces filtres.'), tr('Elargis les criteres et reessaie.')));
+    return;
+  }
+  for (const m of results) {
+    grid.appendChild(posterCard(m, {
+      type: apiType,
+      sub: [typeLabel(apiType, isAnime(m)), mediaYear(m)].filter(Boolean).join(' - '),
+    }));
+  }
 }

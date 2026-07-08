@@ -5,6 +5,7 @@ import {
 } from './db.js';
 import { api } from './api.js';
 import { h, esc, I, openSheet, toast } from './ui.js';
+import { tr } from './i18n.js';
 
 // meta = { type, tmdbId, title, poster, backdrop, year, isAnime }
 
@@ -12,7 +13,7 @@ export async function toggleFavorite(meta) {
   const it = ensureItem(meta);
   it.favorite = !it.favorite;
   await saveItem(it);
-  toast(it.favorite ? 'Ajoute aux favoris' : 'Retire des favoris');
+  toast(it.favorite ? tr('Ajoute aux favoris') : tr('Retire des favoris'));
   return it.favorite;
 }
 
@@ -20,7 +21,7 @@ export async function toggleWatchlist(meta) {
   const it = ensureItem(meta);
   it.watchlist = !it.watchlist;
   await saveItem(it);
-  toast(it.watchlist ? 'Ajoute a la watchlist' : 'Retire de la watchlist');
+  toast(it.watchlist ? tr('Ajoute a la watchlist') : tr('Retire de la watchlist'));
   return it.watchlist;
 }
 
@@ -108,7 +109,7 @@ export async function syncTvRuntimes(meta, tmdbId) {
 
 export function openPlaylistSheet(meta, onChange) {
   const box = h('<div></div>');
-  box.appendChild(h('<h3>Ajouter a une playlist</h3>'));
+  box.appendChild(h(`<h3>${tr('Ajouter a une playlist')}</h3>`));
 
   const list = h('<div></div>');
   box.appendChild(list);
@@ -117,7 +118,7 @@ export function openPlaylistSheet(meta, onChange) {
     list.innerHTML = '';
     const pls = [...state.playlists.values()].sort((a, b) => a.createdAt - b.createdAt);
     if (!pls.length) {
-      list.appendChild(h('<p style="color:var(--text-muted);font-size:13.5px;padding:4px 0 10px">Aucune playlist pour le moment. Cree la premiere !</p>'));
+      list.appendChild(h(`<p style="color:var(--text-muted);font-size:13.5px;padding:4px 0 10px">${tr('Aucune playlist pour le moment. Cree la premiere !')}</p>`));
     }
     for (const pl of pls) {
       const inIt = pl.items.some((x) => x.id === `${meta.type}_${meta.tmdbId}`);
@@ -133,7 +134,7 @@ export function openPlaylistSheet(meta, onChange) {
         const id = `${meta.type}_${meta.tmdbId}`;
         if (inIt) {
           pl.items = pl.items.filter((x) => x.id !== id);
-          toast(`Retire de "${pl.name}"`);
+          toast(`${tr('Retire de')} "${pl.name}"`);
         } else {
           ensureItem(meta);
           await saveItem(getItem(meta.type, meta.tmdbId));
@@ -141,7 +142,7 @@ export function openPlaylistSheet(meta, onChange) {
             id, type: meta.type, tmdbId: meta.tmdbId,
             title: meta.title, poster: meta.poster, year: meta.year || '',
           });
-          toast(`Ajoute a "${pl.name}"`);
+          toast(`${tr('Ajoute a')} "${pl.name}"`);
         }
         await savePlaylist(pl);
         renderList();
@@ -152,11 +153,11 @@ export function openPlaylistSheet(meta, onChange) {
   };
   renderList();
 
-  const newBtn = h(`<button class="sheet-opt accent">${I.plus}<span>Nouvelle playlist</span></button>`);
+  const newBtn = h(`<button class="sheet-opt accent">${I.plus}<span>${tr('Nouvelle playlist')}</span></button>`);
   newBtn.addEventListener('click', () => {
     if (box.querySelector('.sheet-input')) return;
-    const input = h('<input class="sheet-input" placeholder="Nom de la playlist" autocapitalize="sentences">');
-    const ok = h('<button class="btn">Creer</button>');
+    const input = h(`<input class="sheet-input" placeholder="${tr('Nom de la playlist')}" autocapitalize="sentences">`);
+    const ok = h(`<button class="btn">${tr('Creer')}</button>`);
     box.append(input, ok);
     input.focus();
     const create = async () => {
@@ -172,7 +173,7 @@ export function openPlaylistSheet(meta, onChange) {
         title: meta.title, poster: meta.poster, year: meta.year || '',
       });
       await savePlaylist(pl);
-      toast(`"${pl.name}" creee, titre ajoute`);
+      toast(`"${pl.name}" ${tr('creee, titre ajoute')}`);
       input.remove();
       ok.remove();
       renderList();

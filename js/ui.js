@@ -1,5 +1,6 @@
 // Helpers UI : icones, cartes, sheets, toasts.
 import { img } from './api.js';
+import { tr } from './i18n.js';
 import { getItem, isSeen, isStarted, tvProgress, totalEpisodePlays } from './db.js';
 
 // ---- Icones (SVG inline, traits 2px) ----
@@ -37,6 +38,7 @@ export const I = {
   sun: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.5v2.4M12 19.1v2.4M2.5 12h2.4M19.1 12h2.4M5 5l1.7 1.7M17.3 17.3 19 19M19 5l-1.7 1.7M6.7 17.3 5 19"/></svg>',
   moon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.5 14.5A8.5 8.5 0 0 1 9.5 3.5a8.5 8.5 0 1 0 11 11Z"/></svg>',
   globe: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.7 2.6 4 5.6 4 9s-1.3 6.4-4 9c-2.7-2.6-4-5.6-4-9s1.3-6.4 4-9Z"/></svg>',
+  sliders: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M5 6.5h6M15 6.5h4M5 12h2M11 12h8M5 17.5h9M18 17.5h1"/><circle cx="13" cy="6.5" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="16" cy="17.5" r="2"/></svg>',
   info: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 10v6M12 7h.01"/></svg>',
 };
 
@@ -66,8 +68,8 @@ export function mediaType(m) {
 }
 
 export function typeLabel(type, anime) {
-  if (anime) return 'Anime';
-  return type === 'movie' ? 'Film' : 'Serie';
+  if (anime) return tr('Anime');
+  return type === 'movie' ? tr('Film') : tr('Serie');
 }
 
 export function isReleased(m) {
@@ -90,7 +92,7 @@ export function posterCard(media, opts = {}) {
   if (it?.favorite) badges += `<span class="badge badge-fav">${I.heartFill}</span>`;
   if (it && isSeen(it)) {
     const plays = it.type === 'movie' ? it.plays : 0;
-    badges += `<span class="badge badge-seen">${plays > 1 ? 'x' + plays : 'VU'}</span>`;
+    badges += `<span class="badge badge-seen">${plays > 1 ? 'x' + plays : tr('VU')}</span>`;
   }
 
   let progress = '';
@@ -110,20 +112,22 @@ export function posterCard(media, opts = {}) {
   const year = mediaYear(media) || media.year || '';
 
   const inWl = !!it?.watchlist;
+  const quickBtn = opts.noQuick ? '' : `
+    <button class="card-quick ${inWl ? 'on' : ''}" type="button"
+            aria-label="${inWl ? tr('Retirer de la watchlist') : tr('Ajouter a la watchlist')}">
+      ${inWl ? I.bookmarkFill : I.plus}
+    </button>`;
 
-  // data-q* : meta pour le bouton watchlist rapide, lue par app.js en delegation
+  // data-q* : meta pour le bouton watchlist rapide et le rafraichissement
+  // des cartes restaurees depuis le cache de pages (app.js)
   return h(`
     <a class="card ${opts.wide ? 'card-lg' : ''}" href="#/detail/${type}/${id}"
        data-qtype="${type}" data-qid="${id}" data-qtitle="${esc(title)}"
        data-qposter="${esc(posterPath || '')}" data-qbackdrop="${esc(backdropPath || '')}"
        data-qyear="${esc(year)}" data-qanime="${(opts.isAnime ?? isAnimeLike(media)) ? 1 : 0}"
-       data-qsub="${esc(sub)}">
+       data-qsub="${esc(sub)}" data-qnoquick="${opts.noQuick ? 1 : 0}">
       <div class="poster">
-        ${badges}${imgHtml}${progress}
-        <button class="card-quick ${inWl ? 'on' : ''}" type="button"
-                aria-label="${inWl ? 'Retirer de la watchlist' : 'Ajouter a la watchlist'}">
-          ${inWl ? I.bookmarkFill : I.plus}
-        </button>
+        ${badges}${imgHtml}${progress}${quickBtn}
       </div>
       <div class="card-title">${esc(title)}</div>
       ${sub ? `<div class="card-sub">${esc(sub)}</div>` : ''}
@@ -136,11 +140,11 @@ export function posterCard(media, opts = {}) {
 export function castCard(p) {
   const src = img(p.profile_path, 'w185');
   return h(`
-    <div class="cast-card">
+    <a class="cast-card" href="#/person/${p.id}">
       <div class="cast-photo">${src ? `<img src="${src}" alt="" loading="lazy">` : `<span class="no-img">${esc((p.name || '?').split(' ').map((w) => w[0]).slice(0, 2).join(''))}</span>`}</div>
       <div class="card-title" style="text-align:center">${esc(p.name || '')}</div>
       ${p.character ? `<div class="card-sub" style="text-align:center">${esc(p.character)}</div>` : ''}
-    </div>
+    </a>
   `);
 }
 
