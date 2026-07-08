@@ -118,7 +118,52 @@ function homeFetchSection(body, title, fetcher, type, listingId) {
 
 // Reconstruit un pseudo-media TMDB depuis un item local (pour posterCard)
 function mediaFromItem(it) {
-  return { id: it.tmdbId, title: it.title, poster_path: it.poster, year: it.year };
+  return { id: it.tmdbId, title: it.title, poster_path: it.poster, year: it.year, isAnime: it.isAnime };
+}
+
+/* ---- Vue galerie / liste + filtre statut (watchlist, playlists, bibliotheque) ---- */
+
+const VIEWMODE_KEY = 'bobine_viewmode';
+const getViewMode = () => localStorage.getItem(VIEWMODE_KEY) || 'grid';
+
+function viewToggle(onChange) {
+  const btn = h('<button class="head-btn" aria-label="Changer de vue"></button>');
+  const sync = () => { btn.innerHTML = getViewMode() === 'grid' ? I.rows : I.grid; };
+  sync();
+  btn.addEventListener('click', () => {
+    localStorage.setItem(VIEWMODE_KEY, getViewMode() === 'grid' ? 'list' : 'grid');
+    sync();
+    onChange();
+  });
+  return btn;
+}
+
+// Statut de suivi d'un item, facon TV Time
+function itemStatus(it) {
+  if (!it) return 'todo';
+  if (it.type === 'movie') return (it.plays || 0) > 0 ? 'seen' : 'todo';
+  if (isSeen(it)) return 'seen';
+  if (isStarted(it)) return 'progress';
+  return 'todo';
+}
+
+function statusChips(onChange) {
+  const chips = h(`
+    <div class="chips">
+      <button class="chip on" data-s="all">Tout</button>
+      <button class="chip" data-s="todo">A voir</button>
+      <button class="chip" data-s="progress">En cours</button>
+      <button class="chip" data-s="seen">Vus</button>
+    </div>
+  `);
+  chips.addEventListener('click', (e) => {
+    const c = e.target.closest('.chip');
+    if (!c) return;
+    chips.querySelectorAll('.chip').forEach((x) => x.classList.remove('on'));
+    c.classList.add('on');
+    onChange(c.dataset.s);
+  });
+  return chips;
 }
 
 /* ============================== ACCUEIL ============================== */
@@ -213,8 +258,8 @@ export async function renderHome() {
   const slots = [
     ['Tendances films', () => api.trending('movie'), 'movie', '#/movies'],
     ['Tendances series', () => api.trending('tv'), 'tv', '#/series'],
-    ['Top 10 Netflix — Films', () => api.discoverProvider('movie', 8), 'movie', 'netflix-movies'],
-    ['Top 10 Netflix — Series', () => api.discoverProvider('tv', 8), 'tv', 'netflix-tv'],
+    ['Top 10 Netflix - Films', () => api.discoverProvider('movie', 8), 'movie', 'netflix-movies'],
+    ['Top 10 Netflix - Series', () => api.discoverProvider('tv', 8), 'tv', 'netflix-tv'],
     ['Populaire sur Disney+', () => api.discoverProvider('movie', 337), 'movie', 'disney-movies'],
     ['Populaire sur Prime Video', () => api.discoverProvider('movie', 119), 'movie', 'prime-movies'],
     ['Animes populaires', () => api.discoverAnime(), 'tv', '#/anime'],
@@ -590,7 +635,9 @@ export async function renderDetail(type, id) {
 
 async function loadSagaSections(page, d, type, id) {
   const collectionId = d.belongs_to_collection?.id;
-  const universe = findUniverse({ type, tmdbId: id, collectionId });
+  // keywords : "keywords" pour les films, "results" pour les series
+  const keywordIds = (d.keywords?.keywords || d.keywords?.results || []).map((k) => k.id);
+  const universe = findUniverse({ type, tmdbId: id, collectionId, keywordIds });
   const seen = new Set();
 
   function addSection(title, medias, mediaType, listingId) {
@@ -620,20 +667,36 @@ async function loadSagaSections(page, d, type, id) {
 
   const all = [];
 
-  for (const colId of universe.match?.collections || []) {
-    if (colId === collectionId) continue;
-    try {
-      const col = await api.collection(colId);
-      for (const m of col.parts || []) all.push({ ...m, media_type: 'movie' });
-    } catch { /* ignore */ }
-  }
+  if (universe.keyword) {
+    // Univers par mot-cle : la liste complete vient de TMDB (films + series)
+    for (const kType of ['movie', 'tv']) {
+      try {
+        let pageNum = 1;
+        let totalPages = 1;
+        while (pageNum <= totalPages && pageNum <= 5) {
+          const data = await api.discoverKeyword(kType, universe.keyword, pageNum);
+          totalPages = data.total_pages || 1;
+          for (const m of data.results || []) all.push({ ...m, media_type: kType });
+          pageNum++;
+        }
+      } catch { /* hors ligne */ }
+    }
+  } else {
+    for (const colId of universe.match?.collections || []) {
+      if (colId === collectionId) continue;
+      try {
+        const col = await api.collection(colId);
+        for (const m of col.parts || []) all.push({ ...m, media_type: 'movie' });
+      } catch { /* ignore */ }
+    }
 
-  for (const tvId of universe.match?.tv || []) {
-    if (type === 'tv' && tvId === id) continue;
-    try {
-      const tv = await api.detail('tv', tvId);
-      all.push({ ...tv, media_type: 'tv' });
-    } catch { /* ignore */ }
+    for (const tvId of universe.match?.tv || []) {
+      if (type === 'tv' && tvId === id) continue;
+      try {
+        const tv = await api.detail('tv', tvId);
+        all.push({ ...tv, media_type: 'tv' });
+      } catch { /* ignore */ }
+    }
   }
 
   all.sort((a, b) => {
@@ -818,7 +881,7 @@ export function renderWatchlist() {
   bindBack(page);
   v.appendChild(page);
 
-  const chips = h(`
+  const typeChips = h(`
     <div class="chips">
       <button class="chip on" data-f="all">Tout</button>
       <button class="chip" data-f="movie">Films</button>
@@ -826,41 +889,61 @@ export function renderWatchlist() {
       <button class="chip" data-f="anime">Animes</button>
     </div>
   `);
-  const list = h('<div class="media-list"></div>');
-  page.append(chips, list);
+  const holder = h('<div></div>');
 
   let filter = 'all';
+  let status = 'all';
 
   function draw() {
-    list.innerHTML = '';
+    holder.innerHTML = '';
     let items = [...state.items.values()].filter((i) => i.watchlist);
     if (filter === 'movie') items = items.filter((i) => i.type === 'movie' && !i.isAnime);
     if (filter === 'tv') items = items.filter((i) => i.type === 'tv' && !i.isAnime);
     if (filter === 'anime') items = items.filter((i) => i.isAnime);
+    if (status !== 'all') items = items.filter((i) => itemStatus(i) === status);
     items.sort((a, b) => b.updatedAt - a.updatedAt);
 
     if (!items.length) {
-      list.appendChild(emptyState('bookmark', 'Watchlist vide', 'Ajoute des films et series a voir plus tard.'));
+      holder.appendChild(emptyState('bookmark', 'Rien ici', status === 'all'
+        ? 'Ajoute des films et series a voir plus tard.'
+        : 'Aucun titre avec ce statut.'));
       return;
     }
-    for (const it of items) {
-      const row = mediaListRow(it, {
-        btnIcon: I.x,
-        onBtn: async () => {
-          it.watchlist = false;
-          await saveItem(it);
-          toast('Retire de la watchlist');
-          draw();
-        },
-      });
-      list.appendChild(row);
+
+    if (getViewMode() === 'grid') {
+      const grid = h('<div class="grid"></div>');
+      for (const it of items) {
+        grid.appendChild(posterCard(mediaFromItem(it), {
+          type: it.type,
+          isAnime: it.isAnime,
+          sub: [typeLabel(it.type, it.isAnime), it.year].filter(Boolean).join(' - '),
+        }));
+      }
+      holder.appendChild(grid);
+    } else {
+      const list = h('<div class="media-list"></div>');
+      for (const it of items) {
+        list.appendChild(mediaListRow(it, {
+          btnIcon: I.x,
+          onBtn: async () => {
+            it.watchlist = false;
+            await saveItem(it);
+            toast('Retire de la watchlist');
+            draw();
+          },
+        }));
+      }
+      holder.appendChild(list);
     }
   }
 
-  chips.querySelectorAll('.chip').forEach((c) =>
+  page.querySelector('.head-actions').prepend(viewToggle(draw));
+  page.append(typeChips, statusChips((s) => { status = s; draw(); }), holder);
+
+  typeChips.querySelectorAll('.chip').forEach((c) =>
     c.addEventListener('click', () => {
       filter = c.dataset.f;
-      chips.querySelectorAll('.chip').forEach((x) => x.classList.remove('on'));
+      typeChips.querySelectorAll('.chip').forEach((x) => x.classList.remove('on'));
       c.classList.add('on');
       draw();
     })
@@ -971,6 +1054,7 @@ export function renderPlaylist(id) {
   `);
   page.appendChild(head);
   bindBack(page);
+  head.querySelector('.head-actions').prepend(viewToggle(() => draw()));
 
   head.querySelector('[data-act="menu"]').addEventListener('click', () => {
     const box = h(`<div><h3>${esc(pl.name)}</h3></div>`);
@@ -1000,27 +1084,48 @@ export function renderPlaylist(id) {
     });
   });
 
-  const list = h('<div class="media-list"></div>');
-  page.appendChild(list);
+  const holder = h('<div></div>');
+  let status = 'all';
+  page.append(statusChips((s) => { status = s; draw(); }), holder);
 
   function draw() {
-    list.innerHTML = '';
-    if (!pl.items.length) {
-      list.appendChild(emptyState('list', 'Playlist vide', 'Ajoute des titres depuis leur fiche.'));
+    holder.innerHTML = '';
+    let entries = pl.items;
+    if (status !== 'all') {
+      entries = entries.filter((e) => itemStatus(state.items.get(e.id)) === status);
+    }
+
+    if (!entries.length) {
+      holder.appendChild(emptyState('list', status === 'all' ? 'Playlist vide' : 'Rien ici',
+        status === 'all' ? 'Ajoute des titres depuis leur fiche.' : 'Aucun titre avec ce statut.'));
       return;
     }
-    for (const entry of pl.items) {
-      const it = state.items.get(entry.id) || entry;
-      const row = mediaListRow({ ...entry, isAnime: it.isAnime }, {
-        btnIcon: I.x,
-        onBtn: async () => {
-          pl.items = pl.items.filter((x) => x.id !== entry.id);
-          await savePlaylist(pl);
-          toast('Retire de la playlist');
-          draw();
-        },
-      });
-      list.appendChild(row);
+
+    if (getViewMode() === 'grid') {
+      const grid = h('<div class="grid"></div>');
+      for (const entry of entries) {
+        const it = state.items.get(entry.id);
+        grid.appendChild(posterCard(
+          { id: entry.tmdbId, title: entry.title, poster_path: entry.poster, year: entry.year, isAnime: it?.isAnime },
+          { type: entry.type, sub: [typeLabel(entry.type, it?.isAnime), entry.year].filter(Boolean).join(' - ') }
+        ));
+      }
+      holder.appendChild(grid);
+    } else {
+      const list = h('<div class="media-list"></div>');
+      for (const entry of entries) {
+        const it = state.items.get(entry.id) || entry;
+        list.appendChild(mediaListRow({ ...entry, isAnime: it.isAnime }, {
+          btnIcon: I.x,
+          onBtn: async () => {
+            pl.items = pl.items.filter((x) => x.id !== entry.id);
+            await savePlaylist(pl);
+            toast('Retire de la playlist');
+            draw();
+          },
+        }));
+      }
+      holder.appendChild(list);
     }
   }
   draw();
@@ -1277,26 +1382,42 @@ export function renderLibrary(name) {
   bindBack(page);
   v.appendChild(page);
 
-  const list = h('<div class="media-list"></div>');
-  page.appendChild(list);
+  const holder = h('<div></div>');
+  page.appendChild(holder);
 
   if (!cfg) {
-    list.appendChild(emptyState('list', 'Page introuvable'));
+    holder.appendChild(emptyState('list', 'Page introuvable'));
     return;
   }
 
-  const items = [...state.items.values()]
-    .filter(cfg.filter)
-    .sort((a, b) => b.updatedAt - a.updatedAt);
+  page.querySelector('.head-actions').prepend(viewToggle(() => draw()));
 
-  if (!items.length) {
-    list.appendChild(emptyState('popcorn', 'Rien ici pour le moment', 'Tes ajouts apparaitront ici.'));
-    return;
-  }
+  function draw() {
+    holder.innerHTML = '';
+    const items = [...state.items.values()]
+      .filter(cfg.filter)
+      .sort((a, b) => b.updatedAt - a.updatedAt);
 
-  for (const it of items) {
-    list.appendChild(mediaListRow(it, { sub: cfg.sub(it) }));
+    if (!items.length) {
+      holder.appendChild(emptyState('popcorn', 'Rien ici pour le moment', 'Tes ajouts apparaitront ici.'));
+      return;
+    }
+
+    if (getViewMode() === 'grid') {
+      const grid = h('<div class="grid"></div>');
+      for (const it of items) {
+        grid.appendChild(posterCard(mediaFromItem(it), { type: it.type, sub: cfg.sub(it) }));
+      }
+      holder.appendChild(grid);
+    } else {
+      const list = h('<div class="media-list"></div>');
+      for (const it of items) {
+        list.appendChild(mediaListRow(it, { sub: cfg.sub(it) }));
+      }
+      holder.appendChild(list);
+    }
   }
+  draw();
 }
 
 /* ============================== LISTING (tout voir) ============================== */

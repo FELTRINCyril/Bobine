@@ -264,6 +264,29 @@ input, textarea {
 
 .badge-fav svg { width: 13px; height: 13px; }
 
+/* Bouton actions rapides sur les affiches */
+
+.card-quick {
+  position: absolute;
+  right: 6px;
+  bottom: 8px;
+  z-index: 3;
+  width: 27px;
+  height: 27px;
+  border-radius: 50%;
+  background: rgba(12, 10, 16, 0.68);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  color: #fff;
+  display: grid;
+  place-items: center;
+}
+
+.card-quick svg { width: 14px; height: 14px; }
+
+.card-quick:active { transform: scale(0.9); background: var(--accent); }
+
 /* Progression series (signature) */
 
 .progress {
@@ -1272,6 +1295,43 @@ a.stat:active { background: var(--surface-2); transform: scale(0.98); }
 }
 
 @keyframes spin { to { transform: rotate(360deg); } }
+
+/* ---------- Verrou portrait ----------
+   iOS ignore l'orientation du manifest pour les PWA : on masque l'app
+   derriere un rappel plein ecran quand le telephone passe en paysage.
+   Cible uniquement les ecrans tactiles peu hauts (= un telephone tourne),
+   pas les tablettes ni le bureau. */
+
+#rotate-lock { display: none; }
+
+@media screen and (orientation: landscape) and (pointer: coarse) and (max-height: 520px) {
+  #rotate-lock {
+    display: grid;
+    place-items: center;
+    position: fixed;
+    inset: 0;
+    z-index: 100;
+    background: var(--bg);
+    text-align: center;
+  }
+
+  .rotate-lock-inner { color: var(--text-muted); padding: 24px; }
+
+  .rotate-lock-inner svg {
+    width: 44px;
+    height: 44px;
+    margin: 0 auto 14px;
+    color: var(--accent);
+    animation: rotate-hint 1.6s ease-in-out infinite;
+  }
+
+  .rotate-lock-inner p { font-size: 14.5px; font-weight: 600; line-height: 1.5; }
+}
+
+@keyframes rotate-hint {
+  0%, 55%, 100% { transform: rotate(0); }
+  25%, 35% { transform: rotate(-90deg); }
+}
 
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 

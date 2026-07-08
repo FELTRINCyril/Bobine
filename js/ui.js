@@ -29,6 +29,8 @@ export const I = {
   upload: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V4m0 0 4 4m-4-4-4 4"/><path d="M5 20h14"/></svg>',
   popcorn: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9 7.5 21h9L18 9"/><path d="M5 9h14"/><path d="M7 6a2.5 2.5 0 0 1 3.4-2.3A2.5 2.5 0 0 1 14 2.6 2.5 2.5 0 0 1 17.5 6"/><path d="M10 9l.7 12M14 9l-.7 12"/></svg>',
   play: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.14v14.72a1 1 0 0 0 1.5.86l11.02-7.36a1 1 0 0 0 0-1.72L9.5 4.28A1 1 0 0 0 8 5.14Z"/></svg>',
+  grid: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/></svg>',
+  rows: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="5" height="6" rx="1"/><path d="M12 6h8M12 9h5"/><rect x="4" y="14" width="5" height="6" rx="1"/><path d="M12 16h8M12 19h5"/></svg>',
   info: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 10v6M12 7h.01"/></svg>',
 };
 
@@ -98,14 +100,32 @@ export function posterCard(media, opts = {}) {
     : `<span class="no-img">${esc(title)}</span>`;
 
   const sub = opts.sub !== undefined ? opts.sub : mediaYear(media) || media.year || '';
+  const backdropPath = media.backdrop_path !== undefined ? media.backdrop_path : media.backdrop;
+  const year = mediaYear(media) || media.year || '';
 
+  // data-q* : meta pour l'action rapide (bouton +), lue par app.js en delegation
   return h(`
-    <a class="card ${opts.wide ? 'card-lg' : ''}" href="#/detail/${type}/${id}">
-      <div class="poster">${badges}${imgHtml}${progress}</div>
+    <a class="card ${opts.wide ? 'card-lg' : ''}" href="#/detail/${type}/${id}"
+       data-qtype="${type}" data-qid="${id}" data-qtitle="${esc(title)}"
+       data-qposter="${esc(posterPath || '')}" data-qbackdrop="${esc(backdropPath || '')}"
+       data-qyear="${esc(year)}" data-qanime="${(opts.isAnime ?? isAnimeLike(media)) ? 1 : 0}"
+       data-qsub="${esc(sub)}">
+      <div class="poster">
+        ${badges}${imgHtml}${progress}
+        <button class="card-quick" type="button" aria-label="Actions rapides">${I.plus}</button>
+      </div>
       <div class="card-title">${esc(title)}</div>
       ${sub ? `<div class="card-sub">${esc(sub)}</div>` : ''}
     </a>
   `);
+}
+
+// Heuristique anime sans dependre d'api.js (evite un import circulaire)
+function isAnimeLike(media) {
+  if (media.isAnime !== undefined) return !!media.isAnime;
+  const genres = media.genre_ids || (media.genres || []).map((g) => g.id);
+  const origin = media.origin_country || [];
+  return genres.includes?.(16) && (origin.includes?.('JP') || media.original_language === 'ja');
 }
 
 // ---- Sheet (panneau bas) ----

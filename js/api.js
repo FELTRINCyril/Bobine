@@ -84,6 +84,16 @@ export const api = {
 
   collection: (id) => get(`/collection/${id}`),
 
+  // Films/series d'un univers via mot-cle TMDB (ex: 180547 = MCU).
+  // Le filtre vote_count ecarte les courts promo et documentaires confidentiels.
+  discoverKeyword: (type, keywordId, page = 1) =>
+    get(`/discover/${type}`, {
+      with_keywords: keywordId,
+      sort_by: type === 'movie' ? 'primary_release_date.asc' : 'first_air_date.asc',
+      'vote_count.gte': 30,
+      page,
+    }),
+
   keywordMovies: (id, page = 1) =>
     get(`/keyword/${id}/movies`, { page, sort_by: 'release_date.asc' }),
 
