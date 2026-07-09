@@ -10,8 +10,9 @@ import {
 } from './db.js';
 import { findUniverse } from './universes.js';
 import { getConfig, resetConfig } from './config.js';
-import { connect, disconnect, syncNow, syncStatus, resetAllData } from './sync.js';
+import { disconnect, syncNow, syncStatus, resetAllData } from './sync.js';
 import { hasSync } from './storage/index.js';
+import { promptCloudConnect, downloadExport } from './cloudConnect.js';
 import {
   h, esc, I, posterCard, castCard, openSheet, toast, emptyState, spinner,
   mediaTitle, mediaYear, mediaType, typeLabel, isReleased,
@@ -1259,13 +1260,7 @@ export function renderProfile() {
   `));
 
   function doExport() {
-    const blob = new Blob([exportJson()], { type: 'application/json' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = `bobine-${new Date().toISOString().slice(0, 10)}.json`;
-    a.click();
-    URL.revokeObjectURL(a.href);
-    toast(tr('Export lance'));
+    downloadExport();
   }
 
   function doImport() {
@@ -1738,16 +1733,18 @@ export function renderSettings() {
       return false;
     };
     const dbxBtn = h(`<button class="set-row">${I.globe}<span>${tr('Se connecter avec Dropbox')}</span><span class="chev">${I.chevRight}</span></button>`);
-    dbxBtn.addEventListener('click', () => { if (secureGuard()) connect('dropbox'); });
+    dbxBtn.addEventListener('click', async () => {
+      const r = await promptCloudConnect('dropbox', { secureGuard });
+      if (r === undefined) toast(tr('Connexion annulee'));
+    });
     const gdBtn = h(`<button class="set-row">${I.globe}<span>${tr('Se connecter avec Google Drive')}</span><span class="chev">${I.chevRight}</span></button>`);
     gdBtn.addEventListener('click', async () => {
-      if (!secureGuard()) return;
-      try {
-        const r = await connect('gdrive');
-        if (r.langChanged) { location.reload(); return; }
-        toast(tr('Synchronise'));
-        renderSettings();
-      } catch { toast(tr('Connexion annulee')); }
+      const r = await promptCloudConnect('gdrive', { secureGuard });
+      if (r === null) return;
+      if (r === undefined) { toast(tr('Connexion annulee')); return; }
+      if (r.langChanged) { location.reload(); return; }
+      toast(tr('Synchronise'));
+      renderSettings();
     });
     box.append(dbxBtn, gdBtn);
     box.appendChild(h(`<p class="settings-note">${tr('Synchronise tes donnees pour les retrouver sur un autre appareil et survivre a une desinstallation.')}</p>`));

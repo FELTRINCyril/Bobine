@@ -4,8 +4,9 @@
 import { h } from './ui.js';
 import { tr } from './i18n.js';
 import { useKey, useProxy, hasDefaultProxy, DEFAULT_PROXY, isV4Token, isConfigured } from './config.js';
-import { connect, uploadLocal } from './sync.js';
+import { uploadLocal } from './sync.js';
 import { hasSync, getProvider } from './storage/index.js';
+import { promptCloudConnect } from './cloudConnect.js';
 
 const TMDB_API_URL = 'https://www.themoviedb.org/settings/api';
 const PROVIDER_LABEL = { dropbox: 'Dropbox', gdrive: 'Google Drive' };
@@ -83,29 +84,24 @@ export function renderOnboarding(onDone) {
     cloudBox.appendChild(cloudBtns);
 
     async function tryCloud(providerId, btn) {
-      if (!window.isSecureContext) {
-        setStatus(tr('La synchro cloud necessite HTTPS (ou localhost). Deploie l\'app pour l\'utiliser sur mobile.'));
-        return;
-      }
       busy(btn, true);
-      setStatus(tr('Synchronisation...'));
-      try {
-        if (providerId === 'dropbox') {
-          connect('dropbox');
-          return;
-        }
-        const r = await connect('gdrive');
-        if (r.langChanged) { location.reload(); return; }
-        if (isConfigured()) {
-          setStatus(tr('Donnees recuperees !'), true);
-          setTimeout(onDone, 500);
-        } else {
-          setStatus(tr('Connecte ! Configure l\'acces TMDB ci-dessous pour commencer.'), true);
-        }
-      } catch {
-        setStatus(tr('Connexion annulee'));
-      } finally {
-        busy(btn, false);
+      const r = await promptCloudConnect(providerId, {
+        secureGuard: () => {
+          if (window.isSecureContext) return true;
+          setStatus(tr('La synchro cloud necessite HTTPS (ou localhost). Deploie l\'app pour l\'utiliser sur mobile.'));
+          return false;
+        },
+      });
+      busy(btn, false);
+      if (r === null) return;
+      if (r === undefined) { setStatus(tr('Connexion annulee')); return; }
+      if (providerId === 'dropbox') return;
+      if (r.langChanged) { location.reload(); return; }
+      if (isConfigured()) {
+        setStatus(tr('Donnees recuperees !'), true);
+        setTimeout(onDone, 500);
+      } else {
+        setStatus(tr('Connecte ! Configure l\'acces TMDB ci-dessous pour commencer.'), true);
       }
     }
 

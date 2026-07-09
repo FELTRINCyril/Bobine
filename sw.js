@@ -1,5 +1,5 @@
 // Service worker : app dispo hors ligne, cache des images TMDB
-const VERSION = 'bobine-v17';
+const VERSION = 'bobine-v18';
 const SHELL = [
   './',
   './index.html',
@@ -9,6 +9,7 @@ const SHELL = [
   './js/config.js',
   './js/onboarding.js',
   './js/sync.js',
+  './js/cloudConnect.js',
   './js/storage/index.js',
   './js/storage/dropbox.js',
   './js/storage/googledrive.js',
