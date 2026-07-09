@@ -1,0 +1,328 @@
+/* ============================================================
+   Bobine - themes (skin x mode)
+   Chaque skin : palette, rayons, typo. Le mode bascule clair/sombre.
+   ============================================================ */
+
+/* ---------- Cinema (defaut, salle obscure) ---------- */
+:root[data-skin="cinema"][data-mode="dark"] {
+  --bg: #0c0a10;
+  --surface: #16131d;
+  --surface-2: #201b2b;
+  --surface-3: #2a2438;
+  --line: rgba(255, 255, 255, 0.07);
+  --text: #f2eff7;
+  --text-muted: #8e87a0;
+  --text-faint: #5f5872;
+  --accent: #ff3d6e;
+  --accent-soft: rgba(255, 61, 110, 0.14);
+  --seen: #3ddc97;
+  --seen-soft: rgba(61, 220, 151, 0.14);
+  --gold: #ffc145;
+  --grad-accent: linear-gradient(90deg, #ff3d6e, #ff8a5c);
+  --radius: 14px;
+  --radius-sm: 10px;
+  --font-display: "Avenir Next Condensed", "Arial Narrow", system-ui, sans-serif;
+  --shadow-card: 0 8px 24px rgba(0, 0, 0, 0.35);
+  --tabbar-bg: rgba(12, 10, 16, 0.88);
+}
+
+:root[data-skin="cinema"][data-mode="light"] {
+  --bg: #f4f2f8;
+  --surface: #ffffff;
+  --surface-2: #eae7f1;
+  --surface-3: #d9d4e4;
+  --line: rgba(25, 12, 50, 0.09);
+  --text: #1a1424;
+  --text-muted: #6b6382;
+  --text-faint: #9b93b0;
+  --accent: #e83562;
+  --accent-soft: rgba(232, 53, 98, 0.1);
+  --seen: #119a63;
+  --seen-soft: rgba(17, 154, 99, 0.1);
+  --gold: #d4920a;
+  --grad-accent: linear-gradient(90deg, #e83562, #f07040);
+  --radius: 14px;
+  --radius-sm: 10px;
+  --font-display: "Avenir Next Condensed", "Arial Narrow", system-ui, sans-serif;
+  --shadow-card: 0 6px 18px rgba(40, 20, 60, 0.08);
+  --tabbar-bg: rgba(250, 248, 253, 0.92);
+}
+
+/* ---------- Neon (cyberpunk) ---------- */
+:root[data-skin="neon"][data-mode="dark"] {
+  --bg: #06060f;
+  --surface: #0e0e1c;
+  --surface-2: #141428;
+  --surface-3: #1c1c38;
+  --line: rgba(0, 240, 255, 0.12);
+  --text: #eef8ff;
+  --text-muted: #7a8fa8;
+  --text-faint: #4a5568;
+  --accent: #00f0ff;
+  --accent-soft: rgba(0, 240, 255, 0.12);
+  --seen: #ff2d9a;
+  --seen-soft: rgba(255, 45, 154, 0.14);
+  --gold: #ffe566;
+  --grad-accent: linear-gradient(90deg, #00f0ff, #ff2d9a);
+  --radius: 6px;
+  --radius-sm: 4px;
+  --font-display: "SF Mono", "Menlo", "Consolas", monospace;
+  --shadow-card: 0 0 20px rgba(0, 240, 255, 0.08);
+  --tabbar-bg: rgba(6, 6, 15, 0.94);
+}
+
+:root[data-skin="neon"][data-mode="light"] {
+  --bg: #ece8ff;
+  --surface: #f8f6ff;
+  --surface-2: #e0daf8;
+  --surface-3: #cdc4f0;
+  --line: rgba(80, 40, 140, 0.12);
+  --text: #12082a;
+  --text-muted: #5c4d80;
+  --text-faint: #8a7aaa;
+  --accent: #0099cc;
+  --accent-soft: rgba(0, 153, 204, 0.12);
+  --seen: #c4007a;
+  --seen-soft: rgba(196, 0, 122, 0.1);
+  --gold: #b8860b;
+  --grad-accent: linear-gradient(90deg, #0099cc, #c4007a);
+  --radius: 6px;
+  --radius-sm: 4px;
+  --font-display: "SF Mono", "Menlo", "Consolas", monospace;
+  --shadow-card: 0 4px 16px rgba(80, 40, 140, 0.1);
+  --tabbar-bg: rgba(248, 246, 255, 0.94);
+}
+
+/* ---------- Minimal (epure) ---------- */
+:root[data-skin="minimal"][data-mode="dark"] {
+  --bg: #111111;
+  --surface: #1a1a1a;
+  --surface-2: #242424;
+  --surface-3: #2e2e2e;
+  --line: rgba(255, 255, 255, 0.08);
+  --text: #f5f5f5;
+  --text-muted: #999999;
+  --text-faint: #666666;
+  --accent: #ffffff;
+  --accent-soft: rgba(255, 255, 255, 0.08);
+  --seen: #4ade80;
+  --seen-soft: rgba(74, 222, 128, 0.12);
+  --gold: #fbbf24;
+  --grad-accent: linear-gradient(90deg, #e5e5e5, #a3a3a3);
+  --radius: 20px;
+  --radius-sm: 14px;
+  --font-display: -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
+  --shadow-card: none;
+  --tabbar-bg: rgba(17, 17, 17, 0.96);
+}
+
+:root[data-skin="minimal"][data-mode="light"] {
+  --bg: #fafafa;
+  --surface: #ffffff;
+  --surface-2: #f0f0f0;
+  --surface-3: #e5e5e5;
+  --line: rgba(0, 0, 0, 0.08);
+  --text: #171717;
+  --text-muted: #737373;
+  --text-faint: #a3a3a3;
+  --accent: #171717;
+  --accent-soft: rgba(0, 0, 0, 0.06);
+  --seen: #16a34a;
+  --seen-soft: rgba(22, 163, 74, 0.1);
+  --gold: #ca8a04;
+  --grad-accent: linear-gradient(90deg, #404040, #171717);
+  --radius: 20px;
+  --radius-sm: 14px;
+  --font-display: -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
+  --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.06);
+  --tabbar-bg: rgba(255, 255, 255, 0.96);
+}
+
+/* ---------- Retro (vintage chaleureux) ---------- */
+:root[data-skin="retro"][data-mode="dark"] {
+  --bg: #14100c;
+  --surface: #1f1812;
+  --surface-2: #2a2118;
+  --surface-3: #352a1e;
+  --line: rgba(232, 160, 48, 0.15);
+  --text: #f5e6d0;
+  --text-muted: #a89070;
+  --text-faint: #6e5c48;
+  --accent: #e8a030;
+  --accent-soft: rgba(232, 160, 48, 0.14);
+  --seen: #6bc96b;
+  --seen-soft: rgba(107, 201, 107, 0.14);
+  --gold: #ffd166;
+  --grad-accent: linear-gradient(90deg, #e8a030, #c45c26);
+  --radius: 4px;
+  --radius-sm: 3px;
+  --font-display: Georgia, "Times New Roman", serif;
+  --shadow-card: 4px 4px 0 rgba(0, 0, 0, 0.4);
+  --tabbar-bg: rgba(20, 16, 12, 0.95);
+}
+
+:root[data-skin="retro"][data-mode="light"] {
+  --bg: #f5efe4;
+  --surface: #fffaf2;
+  --surface-2: #ebe3d4;
+  --surface-3: #ddd2be;
+  --line: rgba(100, 70, 30, 0.15);
+  --text: #2a1f10;
+  --text-muted: #7a6548;
+  --text-faint: #a89478;
+  --accent: #c47f10;
+  --accent-soft: rgba(196, 127, 16, 0.12);
+  --seen: #3d8b3d;
+  --seen-soft: rgba(61, 139, 61, 0.1);
+  --gold: #b8860b;
+  --grad-accent: linear-gradient(90deg, #c47f10, #a04020);
+  --radius: 4px;
+  --radius-sm: 3px;
+  --font-display: Georgia, "Times New Roman", serif;
+  --shadow-card: 3px 3px 0 rgba(80, 50, 20, 0.12);
+  --tabbar-bg: rgba(255, 250, 242, 0.95);
+}
+
+/* ---------- Ocean (bleu doux) ---------- */
+:root[data-skin="ocean"][data-mode="dark"] {
+  --bg: #041018;
+  --surface: #0a1c28;
+  --surface-2: #102838;
+  --surface-3: #163448;
+  --line: rgba(46, 196, 182, 0.12);
+  --text: #e8f4f8;
+  --text-muted: #7aa8b8;
+  --text-faint: #4a7080;
+  --accent: #2ec4b6;
+  --accent-soft: rgba(46, 196, 182, 0.14);
+  --seen: #70e000;
+  --seen-soft: rgba(112, 224, 0, 0.12);
+  --gold: #ffba08;
+  --grad-accent: linear-gradient(90deg, #2ec4b6, #3a86ff);
+  --radius: 18px;
+  --radius-sm: 12px;
+  --font-display: "Avenir Next", "Segoe UI", system-ui, sans-serif;
+  --shadow-card: 0 10px 28px rgba(0, 40, 60, 0.35);
+  --tabbar-bg: rgba(4, 16, 24, 0.9);
+}
+
+:root[data-skin="ocean"][data-mode="light"] {
+  --bg: #e8f4f8;
+  --surface: #ffffff;
+  --surface-2: #d4ecf4;
+  --surface-3: #b8dde8;
+  --line: rgba(20, 80, 100, 0.1);
+  --text: #0a2838;
+  --text-muted: #4a7888;
+  --text-faint: #7aa0b0;
+  --accent: #1a9e90;
+  --accent-soft: rgba(26, 158, 144, 0.1);
+  --seen: #4a9e00;
+  --seen-soft: rgba(74, 158, 0, 0.1);
+  --gold: #e09000;
+  --grad-accent: linear-gradient(90deg, #1a9e90, #2878d8);
+  --radius: 18px;
+  --radius-sm: 12px;
+  --font-display: "Avenir Next", "Segoe UI", system-ui, sans-serif;
+  --shadow-card: 0 8px 20px rgba(20, 80, 100, 0.08);
+  --tabbar-bg: rgba(232, 244, 248, 0.92);
+}
+
+/* ---------- Fallback (avant init JS) ---------- */
+:root {
+  --bg: #0c0a10;
+  --surface: #16131d;
+  --surface-2: #201b2b;
+  --surface-3: #2a2438;
+  --line: rgba(255, 255, 255, 0.07);
+  --text: #f2eff7;
+  --text-muted: #8e87a0;
+  --text-faint: #5f5872;
+  --accent: #ff3d6e;
+  --accent-soft: rgba(255, 61, 110, 0.14);
+  --seen: #3ddc97;
+  --seen-soft: rgba(61, 220, 151, 0.14);
+  --gold: #ffc145;
+  --grad-accent: linear-gradient(90deg, #ff3d6e, #ff8a5c);
+  --radius: 14px;
+  --radius-sm: 10px;
+  --font-display: "Avenir Next Condensed", "Arial Narrow", system-ui, sans-serif;
+  --font-body: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, sans-serif;
+  --shadow-card: 0 8px 24px rgba(0, 0, 0, 0.35);
+  --tabbar-bg: rgba(12, 10, 16, 0.88);
+  --tabbar-h: 58px;
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-top: env(safe-area-inset-top, 0px);
+  --page-pad: 18px;
+}
+
+/* ---------- Ajustements par skin (formes / disposition) ---------- */
+
+[data-skin="neon"] .card {
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow-card);
+}
+[data-skin="neon"] .chip.on {
+  box-shadow: 0 0 12px var(--accent-soft);
+}
+[data-skin="neon"] .cine-brand { letter-spacing: 0.12em; text-transform: uppercase; }
+
+[data-skin="minimal"] .card { box-shadow: var(--shadow-card); }
+[data-skin="minimal"] .tabbar { backdrop-filter: none; border-top: 1px solid var(--line); }
+[data-skin="minimal"] .seg-btn.on { background: var(--text); color: var(--bg); }
+[data-skin="minimal"][data-mode="light"] .seg-btn.on { background: var(--text); color: #fff; }
+
+[data-skin="retro"] .card {
+  border: 2px solid var(--line);
+  box-shadow: var(--shadow-card);
+}
+[data-skin="retro"] .chip {
+  border: 2px solid var(--line);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-display);
+}
+[data-skin="retro"] .page-title { font-family: var(--font-display); font-style: italic; }
+
+[data-skin="ocean"] .chip { border-radius: 999px; }
+[data-skin="ocean"] .chip.on { background: var(--grad-accent); border: none; }
+[data-skin="ocean"] .btn { border-radius: 999px; }
+[data-skin="ocean"] .stat { border-radius: var(--radius); }
+
+/* Tabbar + toast par mode */
+.tabbar { background: var(--tabbar-bg); }
+[data-mode="light"] .toast { color: #fff; background: #2a2438; }
+[data-skin="minimal"][data-mode="light"] .toast { background: #171717; }
+
+/* Selecteur de theme dans les parametres */
+.theme-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.theme-card {
+  position: relative;
+  padding: 12px;
+  border-radius: var(--radius-sm);
+  border: 2px solid var(--line);
+  background: var(--surface);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+.theme-card.on { border-color: var(--accent); }
+.theme-card-preview {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 8px;
+  height: 28px;
+  border-radius: 6px;
+  overflow: hidden;
+}
+.theme-card-preview i {
+  flex: 1;
+  display: block;
+  border-radius: 3px;
+}
+.theme-card-name { font-size: 13px; font-weight: 700; display: block; }
+.theme-card-desc { font-size: 11px; color: var(--text-muted); display: block; margin-top: 2px; }

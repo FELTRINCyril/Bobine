@@ -10,10 +10,11 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Bobine">
-<script>document.documentElement.dataset.theme = localStorage.getItem('bobine_theme') || 'dark';</script>
+<script>(function(){var s=localStorage.getItem('bobine_skin')||'cinema',m=localStorage.getItem('bobine_mode');if(!m)m=localStorage.getItem('bobine_theme')==='light'?'light':'dark';document.documentElement.dataset.skin=s;document.documentElement.dataset.mode=m;})();</script>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="icons/icon-180.png">
 <link rel="icon" type="image/png" href="icons/icon-180.png">
+<link rel="stylesheet" href="css/themes.css">
 <link rel="stylesheet" href="css/app.css">
 </head>
 <body>

@@ -15,6 +15,8 @@ const K_TMDB_KEY = 'bobine_tmdb_key';
 const K_TMDB_PROXY = 'bobine_tmdb_proxy';
 const K_LANG = 'bobine_lang';
 const K_THEME = 'bobine_theme';
+const K_SKIN = 'bobine_skin';
+const K_MODE = 'bobine_mode';
 
 export const getProvider = () => localStorage.getItem(K_PROVIDER) || '';
 export const hasSync = () => getProvider() !== '';
@@ -46,7 +48,9 @@ export function buildSnapshot() {
     config,
     prefs: {
       lang: localStorage.getItem(K_LANG) || '',
-      theme: localStorage.getItem(K_THEME) || '',
+      skin: localStorage.getItem(K_SKIN) || 'cinema',
+      mode: localStorage.getItem(K_MODE) || localStorage.getItem(K_THEME) || 'dark',
+      theme: localStorage.getItem(K_MODE) || localStorage.getItem(K_THEME) || '',
     },
     items: [...state.items.values()],
     playlists: [...state.playlists.values()],
@@ -74,7 +78,14 @@ export async function applySnapshot(doc) {
   // Preferences
   const p = doc.prefs || {};
   if (p.lang) localStorage.setItem(K_LANG, p.lang);
-  if (p.theme) localStorage.setItem(K_THEME, p.theme);
+  if (p.skin) localStorage.setItem(K_SKIN, p.skin);
+  if (p.mode) {
+    localStorage.setItem(K_MODE, p.mode);
+    localStorage.setItem(K_THEME, p.mode);
+  } else if (p.theme) {
+    localStorage.setItem(K_THEME, p.theme);
+    localStorage.setItem(K_MODE, p.theme);
+  }
 
   // Donnees
   await replaceAll(doc.items, doc.playlists);

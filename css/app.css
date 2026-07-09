@@ -1,51 +1,6 @@
 /* ============================================================
-   Bobine - theme "salle obscure"
-   Fond encre violacee, affiches en vedette, accent framboise,
-   vert menthe reserve au statut "vu".
+   Bobine - styles globaux (tokens dans css/themes.css)
    ============================================================ */
-
-:root {
-  --bg: #0c0a10;
-  --surface: #16131d;
-  --surface-2: #201b2b;
-  --surface-3: #2a2438;
-  --line: rgba(255, 255, 255, 0.07);
-  --text: #f2eff7;
-  --text-muted: #8e87a0;
-  --text-faint: #5f5872;
-  --accent: #ff3d6e;
-  --accent-soft: rgba(255, 61, 110, 0.14);
-  --seen: #3ddc97;
-  --seen-soft: rgba(61, 220, 151, 0.14);
-  --gold: #ffc145;
-  --grad-accent: linear-gradient(90deg, #ff3d6e, #ff8a5c);
-  --radius: 14px;
-  --radius-sm: 10px;
-  --tabbar-h: 58px;
-  --safe-bottom: env(safe-area-inset-bottom, 0px);
-  --safe-top: env(safe-area-inset-top, 0px);
-  --page-pad: 18px;
-  --font-display: "Avenir Next Condensed", "AvenirNextCondensed-Bold", "Arial Narrow", system-ui, sans-serif;
-  --font-body: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, sans-serif;
-}
-
-/* Theme clair (parametres > apparence) */
-:root[data-theme="light"] {
-  --bg: #f4f2f8;
-  --surface: #ffffff;
-  --surface-2: #eae7f1;
-  --surface-3: #d9d4e4;
-  --line: rgba(25, 12, 50, 0.09);
-  --text: #1a1424;
-  --text-muted: #6b6382;
-  --text-faint: #9b93b0;
-  --accent-soft: rgba(255, 61, 110, 0.1);
-  --seen: #119a63;
-  --seen-soft: rgba(17, 154, 99, 0.1);
-}
-
-:root[data-theme="light"] .tabbar { background: rgba(250, 248, 253, 0.9); }
-:root[data-theme="light"] .toast { color: #fff; background: #2a2438; }
 
 * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 
@@ -1571,6 +1526,21 @@ a.stat:active { background: var(--surface-2); transform: scale(0.98); }
   width: 100%;
   margin: 0;
   box-sizing: border-box;
+}
+
+.scroll-load-status {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 52px;
+  padding: 8px 0 16px;
+}
+.scroll-sentinel {
+  width: 100%;
+  height: 1px;
+  pointer-events: none;
+  visibility: hidden;
 }
 
 .spinner {

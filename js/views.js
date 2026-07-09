@@ -10,6 +10,8 @@ import {
 } from './db.js';
 import { findUniverse } from './universes.js';
 import { getConfig, resetConfig } from './config.js';
+import { SKINS, getSkin, getMode, applyAppearance } from './themes.js';
+import { bindInfiniteScroll } from './scrollLoad.js';
 import { disconnect, syncNow, syncStatus, resetAllData } from './sync.js';
 import { hasSync } from './storage/index.js';
 import { promptCloudConnect, downloadExport } from './cloudConnect.js';
@@ -359,16 +361,24 @@ export async function renderCatalog(name) {
 
   const chipsEl = h('<div class="chips"></div>');
   const grid = h('<div class="grid"></div>');
-  const moreWrap = h('<div class="loadmore-wrap"></div>');
-  const more = h(`<button class="btn ghost loadmore">${tr('Charger plus')}</button>`);
-  moreWrap.appendChild(more);
-  page.append(chipsEl, grid, moreWrap);
+  const loadStatus = h('<div class="scroll-load-status"></div>');
+  const sentinel = h('<div class="scroll-sentinel" aria-hidden="true"></div>');
+  loadStatus.appendChild(sentinel);
+  page.append(chipsEl, grid, loadStatus);
   v.appendChild(page);
 
   let current = cfg.chips[0];
   let pageNum = 1;
   let loading = false;
   let heldBack = [];
+  let hasMore = true;
+  let unbindScroll = null;
+
+  function setLoadIndicator(on) {
+    loadStatus.innerHTML = '';
+    loadStatus.appendChild(sentinel);
+    if (on) loadStatus.appendChild(spinner());
+  }
 
   async function load(reset) {
     if (loading) return;
@@ -378,11 +388,19 @@ export async function renderCatalog(name) {
       grid.classList.remove('grid--empty');
       pageNum = 1;
       heldBack = [];
+      hasMore = true;
+      loadStatus.style.display = '';
+      unbindScroll?.();
+      unbindScroll = bindInfiniteScroll(sentinel, () => {
+        if (hasMore && !loading && !current.local) load(false);
+      });
     }
     const type = current.type || cfg.type;
 
     if (current.local) {
-      moreWrap.style.display = 'none';
+      hasMore = false;
+      loadStatus.style.display = 'none';
+      unbindScroll?.();
       const items = [...state.items.values()]
         .filter(current.local)
         .sort((a, b) => b.updatedAt - a.updatedAt);
@@ -398,9 +416,7 @@ export async function renderCatalog(name) {
       return;
     }
 
-    moreWrap.style.display = '';
-    const sp = spinner();
-    grid.parentElement.insertBefore(sp, moreWrap);
+    setLoadIndicator(true);
     try {
       const data = await current.fetch(pageNum);
       let batch = data.results.filter((m) => m.media_type !== 'person');
@@ -414,13 +430,20 @@ export async function renderCatalog(name) {
       for (const m of batch) {
         grid.appendChild(posterCard(m, { type: m.media_type || type }));
       }
-      moreWrap.style.display = pageNum >= data.total_pages ? 'none' : '';
+      hasMore = pageNum < data.total_pages;
+      loadStatus.style.display = hasMore ? '' : 'none';
+      if (!hasMore) unbindScroll?.();
       pageNum++;
     } catch {
-      grid.appendChild(emptyState('film', tr('Hors ligne'), tr('Impossible de charger TMDB.')));
-      moreWrap.style.display = 'none';
+      if (!grid.children.length) {
+        grid.classList.add('grid--empty');
+        grid.appendChild(emptyState('film', tr('Hors ligne'), tr('Impossible de charger TMDB.')));
+      }
+      hasMore = false;
+      loadStatus.style.display = 'none';
+      unbindScroll?.();
     }
-    sp.remove();
+    setLoadIndicator(false);
     loading = false;
   }
 
@@ -435,7 +458,9 @@ export async function renderCatalog(name) {
     chipsEl.appendChild(chip);
   }
 
-  more.addEventListener('click', () => load(false));
+  unbindScroll = bindInfiniteScroll(sentinel, () => {
+    if (hasMore && !loading && !current.local) load(false);
+  });
   load(true);
 }
 
@@ -1543,15 +1568,8 @@ export function renderListing(id) {
 
 /* ============================== PARAMETRES ============================== */
 
-const THEME_KEY = 'bobine_theme';
-export const getTheme = () => localStorage.getItem(THEME_KEY) || 'dark';
-
-export function applyTheme(theme) {
-  localStorage.setItem(THEME_KEY, theme);
-  document.documentElement.dataset.theme = theme;
-  document.querySelector('meta[name="theme-color"]')
-    ?.setAttribute('content', theme === 'light' ? '#f4f2f8' : '#0c0a10');
-}
+// Compat boot : initAppearance() gere skin + mode
+export { initAppearance } from './themes.js';
 
 async function checkForUpdate(statusEl) {
   statusEl.textContent = tr('Verification...');
@@ -1653,22 +1671,51 @@ export function renderSettings() {
 
   // ---- Apparence ----
   box.appendChild(h(`<h2 class="settings-title">${tr('Apparence')}</h2>`));
-  const themeSeg = h(`
+
+  const themeGrid = h('<div class="theme-grid"></div>');
+  function syncSkinCards() {
+    themeGrid.querySelectorAll('.theme-card').forEach((c) => {
+      c.classList.toggle('on', c.dataset.skin === getSkin());
+    });
+  }
+  for (const sk of SKINS) {
+    const card = h(`
+      <button type="button" class="theme-card" data-skin="${sk.id}">
+        <span class="theme-card-preview">
+          <i style="background:${sk.preview[0]}"></i>
+          <i style="background:${sk.preview[1]}"></i>
+          <i style="background:${sk.preview[2]}"></i>
+        </span>
+        <span class="theme-card-name">${tr(sk.label)}</span>
+        <span class="theme-card-desc">${tr(sk.desc)}</span>
+      </button>
+    `);
+    card.addEventListener('click', () => {
+      applyAppearance(sk.id, getMode());
+      syncSkinCards();
+    });
+    themeGrid.appendChild(card);
+  }
+  syncSkinCards();
+  box.appendChild(themeGrid);
+
+  const modeSeg = h(`
     <div class="seg">
-      <button class="seg-btn" data-t="dark">${I.moon}<span>${tr('Sombre')}</span></button>
-      <button class="seg-btn" data-t="light">${I.sun}<span>${tr('Clair')}</span></button>
+      <button class="seg-btn" data-m="dark">${I.moon}<span>${tr('Sombre')}</span></button>
+      <button class="seg-btn" data-m="light">${I.sun}<span>${tr('Clair')}</span></button>
     </div>
   `);
-  const syncTheme = () => themeSeg.querySelectorAll('.seg-btn')
-    .forEach((b) => b.classList.toggle('on', b.dataset.t === getTheme()));
-  syncTheme();
-  themeSeg.addEventListener('click', (e) => {
+  const syncMode = () => modeSeg.querySelectorAll('.seg-btn')
+    .forEach((b) => b.classList.toggle('on', b.dataset.m === getMode()));
+  syncMode();
+  modeSeg.addEventListener('click', (e) => {
     const b = e.target.closest('.seg-btn');
-    if (!b) return;
-    applyTheme(b.dataset.t);
-    syncTheme();
+    if (!b || b.dataset.m === getMode()) return;
+    applyAppearance(getSkin(), b.dataset.m);
+    syncMode();
   });
-  box.appendChild(themeSeg);
+  box.appendChild(modeSeg);
+  box.appendChild(h(`<p class="settings-note">${tr('Chaque theme a son propre style (couleurs, formes). Le mode clair/sombre sapplique au theme choisi.')}</p>`));
 
   // ---- Langue du contenu ----
   box.appendChild(h(`<h2 class="settings-title">${tr('Langue')}</h2>`));

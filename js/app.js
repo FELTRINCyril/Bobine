@@ -7,7 +7,7 @@ import {
   renderHome, renderCatalog, renderDetail, renderWatchlist,
   renderPlaylists, renderPlaylist, renderProfile, renderSearch,
   renderStats, renderLibrary, renderListing, renderBrowse,
-  renderSettings, renderPerson, renderAdvanced, applyTheme, getTheme,
+  renderSettings, renderPerson, renderAdvanced, initAppearance,
 } from './views.js';
 import { isConfigured } from './config.js';
 import { renderOnboarding } from './onboarding.js';
@@ -31,6 +31,36 @@ function buildTabbar() {
       </a>
     `));
   }
+  bindTabDoubleTap(bar);
+}
+
+// Double-tap rapide sur l'onglet actif = remonter en haut (comportement iOS).
+function bindTabDoubleTap(bar) {
+  let last = { hash: '', time: 0 };
+  const DOUBLE_MS = 450;
+
+  bar.addEventListener('click', (e) => {
+    const tab = e.target.closest('a.tab');
+    if (!tab) return;
+    const hash = tab.dataset.hash;
+    const cur = location.hash || '#/home';
+    const onTab = cur === hash || (hash === '#/home' && (cur === '' || cur === '#'));
+    if (!onTab) {
+      last = { hash: '', time: 0 };
+      return;
+    }
+    const now = Date.now();
+    if (hash === last.hash && now - last.time < DOUBLE_MS) {
+      e.preventDefault();
+      last = { hash: '', time: 0 };
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      scrollPos.set(hash, 0);
+      const cached = pageCache.get(hash);
+      if (cached) cached.y = 0;
+      return;
+    }
+    last = { hash, time: now };
+  });
 }
 
 function syncTabbar(hash) {
@@ -204,7 +234,7 @@ function bindScrollUi() {
 }
 
 async function boot() {
-  applyTheme(getTheme());
+  initAppearance();
   // Copie de secours locale saturee (quota) : on previent une seule fois.
   window.addEventListener('bobine:backup-degraded',
     () => toast(tr('Sauvegarde locale saturee : pense a exporter.')), { once: true });
@@ -224,8 +254,9 @@ async function boot() {
   // appareil). Silencieux et sans blocage si hors ligne / non configure.
   try {
     const { langChanged } = await initSync();
+    initAppearance();
     if (langChanged) { location.reload(); return; }
-  } catch (e) { console.warn('[bobine] initSync', e); }
+  } catch (e) { console.warn('[bobine] initSync', e); initAppearance(); }
 
   // Premiere ouverture (aucun acces TMDB configure) : ecran d'onboarding.
   // Le routing ne demarre qu'une fois l'acces valide.
