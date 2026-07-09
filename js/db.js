@@ -113,11 +113,17 @@ export function syncBackup() {
   try { window.dispatchEvent(new CustomEvent('bobine:changed')); } catch { /* pas de window */ }
 }
 
-// Horodatage de la derniere modification locale (le 'at' du mirror), utilise
-// par la synchro distante pour departager local et distant.
-export function localStamp() {
-  try { return JSON.parse(localStorage.getItem(BACKUP_KEY) || '{}').at || 0; }
-  catch { return 0; }
+// Horodatage de la derniere VRAIE modification des donnees (edition, import,
+// changement de config/langue). Sert a la synchro pour departager local et
+// distant. Il ne doit PAS avancer au simple demarrage de l'app : sinon le
+// dernier appareil a ouvrir l'app "gagnerait" et ecraserait l'autre.
+const MTIME_KEY = 'bobine_mtime';
+export function localStamp() { return Number(localStorage.getItem(MTIME_KEY)) || 0; }
+export function touch() {
+  try { localStorage.setItem(MTIME_KEY, String(Date.now())); } catch { /* quota */ }
+}
+export function setStamp(ts) {
+  try { localStorage.setItem(MTIME_KEY, String(ts || 0)); } catch { /* quota */ }
 }
 
 // Remplace entierement l'etat local par celui d'un snapshot distant (adoption
@@ -248,6 +254,7 @@ export async function saveItem(it) {
   } else {
     await idbPutSafe('items', it);
   }
+  touch();
   syncBackup();
 }
 
@@ -345,12 +352,14 @@ export function createPlaylist(name) {
   };
   state.playlists.set(pl.id, pl);
   idbPutSafe('playlists', pl);
+  touch();
   syncBackup();
   return pl;
 }
 
 export async function savePlaylist(pl) {
   await idbPutSafe('playlists', pl);
+  touch();
   syncBackup();
 }
 
@@ -364,6 +373,7 @@ export async function deletePlaylist(id) {
       await idbDelSafe('items', it.id);
     }
   }
+  touch();
   syncBackup();
 }
 
@@ -396,6 +406,7 @@ export async function importJson(text) {
     state.playlists.set(pl.id, pl);
     await idbPutSafe('playlists', pl);
   }
+  touch();
   syncBackup();
   return { items: data.items.length, playlists: (data.playlists || []).length };
 }

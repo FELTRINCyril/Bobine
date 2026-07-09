@@ -1,7 +1,7 @@
 // Synchronisation distante : recupere au demarrage, pousse (anti-rebond) apres
 // chaque modification. Conflit resolu au niveau du document entier, "dernier
 // ecrit gagne" (comparaison des horodatages local/distant). Voir PLAN-PHASE2.md.
-import { localStamp } from './db.js';
+import { localStamp, touch, setStamp, state } from './db.js';
 import {
   getProvider, setProvider, clearSync, hasSync, buildSnapshot, applySnapshot,
 } from './storage/index.js';
@@ -43,12 +43,18 @@ async function pullAndReconcile() {
   catch (e) { console.warn('[bobine] synchro distante (pull) echouee', e); return {}; }
 
   const localAt = localStamp();
-  if (!remote) { schedulePush(0); return {}; }           // rien en ligne -> 1er envoi
+  if (!remote) {
+    // Rien en ligne : on n'envoie que si on a des donnees locales a publier
+    // (evite qu'un appareil vide n'ecrase un cloud vide avec un horodatage neuf).
+    if (state.items.size || state.playlists.size) { touch(); schedulePush(0); }
+    return {};
+  }
   if ((remote.updatedAt || 0) > localAt) {               // distant plus recent -> adoption
     suppress = true;
     let r = {};
     try { r = await applySnapshot(remote); }
     finally { suppress = false; }
+    setStamp(remote.updatedAt || 0); // le local vaut desormais le distant
     lastSync = Date.now();
     return r;
   }

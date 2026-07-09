@@ -3,6 +3,8 @@
 // son appareil), soit l'app passe par un proxy (Cloudflare Worker) qui garde
 // la cle cote serveur. Voir SECURITE.md.
 
+import { touch } from './db.js';
+
 const K_MODE = 'bobine_tmdb_mode';   // 'proxy' | 'key'
 const K_PROXY = 'bobine_tmdb_proxy'; // base URL du Worker (sans slash final)
 const K_KEY = 'bobine_tmdb_key';     // cle TMDB v3 perso
@@ -43,6 +45,7 @@ export function useKey(key) {
   localStorage.setItem(K_MODE, 'key');
   localStorage.setItem(K_KEY, k);
   localStorage.removeItem(K_PROXY);
+  touch();
 }
 
 export function useProxy(base) {
@@ -51,6 +54,7 @@ export function useProxy(base) {
   localStorage.setItem(K_MODE, 'proxy');
   localStorage.setItem(K_PROXY, b);
   localStorage.removeItem(K_KEY);
+  touch();
 }
 
 export function resetConfig() {

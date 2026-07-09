@@ -1,6 +1,7 @@
 // Client TMDB - lecture seule. L'acces (cle perso ou proxy) est resolu au
 // runtime via config.js : aucun secret n'est ecrit dans ce fichier.
 import { getConfig, isV4Token } from './config.js';
+import { touch } from './db.js';
 
 const BASE = 'https://api.themoviedb.org/3';
 const IMG = 'https://image.tmdb.org/t/p/';
@@ -15,6 +16,7 @@ const LANG_KEY = 'bobine_lang';
 export const getLang = () => localStorage.getItem(LANG_KEY) || 'fr-FR';
 export function setLang(lang) {
   localStorage.setItem(LANG_KEY, lang);
+  touch();
   cache.clear();
 }
 

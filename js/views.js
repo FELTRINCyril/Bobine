@@ -6,7 +6,7 @@ import {
   state, getItem, saveItem, isSeen, isStarted, tvProgress,
   watchedEpisodeCount, totalEpisodePlays, computeStats, formatDuration,
   savePlaylist, deletePlaylist, createPlaylist,
-  exportJson, importJson, ensureItem, isBackupHealthy,
+  exportJson, importJson, ensureItem, isBackupHealthy, touch,
 } from './db.js';
 import { findUniverse } from './universes.js';
 import { getConfig, resetConfig } from './config.js';
@@ -1612,6 +1612,7 @@ export function renderSettings() {
     const b = e.target.closest('.seg-btn');
     if (!b) return;
     applyTheme(b.dataset.t);
+    touch();
     syncTheme();
   });
   box.appendChild(themeSeg);
