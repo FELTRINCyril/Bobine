@@ -10,6 +10,8 @@ import {
 } from './db.js';
 import { findUniverse } from './universes.js';
 import { getConfig, resetConfig } from './config.js';
+import { connect, disconnect, syncNow, syncStatus } from './sync.js';
+import { hasSync } from './storage/index.js';
 import {
   h, esc, I, posterCard, castCard, openSheet, toast, emptyState, spinner,
   mediaTitle, mediaYear, mediaType, typeLabel, isReleased,
@@ -1647,6 +1649,35 @@ export function renderSettings() {
     location.reload();
   });
   box.appendChild(reconf);
+
+  // ---- Sauvegarde et synchronisation ----
+  box.appendChild(h(`<h2 class="settings-title">${tr('Sauvegarde et synchronisation')}</h2>`));
+  const providerLabel = { dropbox: 'Dropbox', gdrive: 'Google Drive' };
+  if (hasSync()) {
+    const { provider } = syncStatus();
+    box.appendChild(h(`<p class="settings-note">${tr('Connecte :')} ${providerLabel[provider] || provider}</p>`));
+    const syncBtn = h(`<button class="set-row">${I.refresh}<span>${tr('Synchroniser maintenant')}</span><span class="chev">${I.chevRight}</span></button>`);
+    syncBtn.addEventListener('click', async () => {
+      toast(tr('Synchronisation...'));
+      await syncNow();
+      toast(tr('Synchronise'));
+    });
+    const offBtn = h(`<button class="set-row">${I.globe}<span>${tr('Se deconnecter du cloud')}</span><span class="chev">${I.chevRight}</span></button>`);
+    offBtn.addEventListener('click', () => { disconnect(); renderSettings(); });
+    box.append(syncBtn, offBtn);
+  } else {
+    const dbxBtn = h(`<button class="set-row">${I.globe}<span>${tr('Se connecter avec Dropbox')}</span><span class="chev">${I.chevRight}</span></button>`);
+    dbxBtn.addEventListener('click', () => {
+      // OAuth/PKCE (crypto.subtle) exige un contexte securise : HTTPS ou localhost.
+      if (!window.isSecureContext) {
+        toast(tr('La synchro cloud necessite HTTPS (ou localhost). Deploie l\'app pour l\'utiliser sur mobile.'));
+        return;
+      }
+      connect('dropbox');
+    });
+    box.appendChild(dbxBtn);
+    box.appendChild(h(`<p class="settings-note">${tr('Synchronise tes donnees pour les retrouver sur un autre appareil et survivre a une desinstallation. Google Drive arrive bientot.')}</p>`));
+  }
 
   // ---- Mise a jour ----
   box.appendChild(h(`<h2 class="settings-title">${tr('Application')}</h2>`));

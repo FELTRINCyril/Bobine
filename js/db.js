@@ -50,6 +50,16 @@ async function idbDel(store, key) {
   });
 }
 
+async function idbClear(store) {
+  const d = await openDb();
+  return new Promise((resolve, reject) => {
+    const tx = d.transaction(store, 'readwrite');
+    tx.objectStore(store).clear();
+    tx.oncomplete = resolve;
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
 // Ecritures IndexedDB tolerantes aux pannes (quota, mode prive, base
 // indisponible) : on n'interrompt jamais l'action utilisateur. L'etat en
 // memoire + la copie localStorage prennent le relais. Voir SECURITE.md.
@@ -99,6 +109,32 @@ export function syncBackup() {
   } catch {
     flagBackup(false);
   }
+  // Notifie la couche de synchro distante (js/sync.js) qu'il y a du nouveau.
+  try { window.dispatchEvent(new CustomEvent('bobine:changed')); } catch { /* pas de window */ }
+}
+
+// Horodatage de la derniere modification locale (le 'at' du mirror), utilise
+// par la synchro distante pour departager local et distant.
+export function localStamp() {
+  try { return JSON.parse(localStorage.getItem(BACKUP_KEY) || '{}').at || 0; }
+  catch { return 0; }
+}
+
+// Remplace entierement l'etat local par celui d'un snapshot distant (adoption
+// "dernier ecrit gagne"). Utilise par la synchro. Ne declenche pas de push :
+// l'appelant gere la suppression de l'evenement.
+export async function replaceAll(items, playlists) {
+  state.items.clear();
+  state.playlists.clear();
+  for (const it of items || []) state.items.set(it.id, it);
+  for (const pl of playlists || []) state.playlists.set(pl.id, pl);
+  try {
+    await idbClear('items');
+    await idbClear('playlists');
+  } catch (e) { console.warn('[bobine] purge IndexedDB avant adoption echouee', e); }
+  for (const it of items || []) await idbPutSafe('items', it);
+  for (const pl of playlists || []) await idbPutSafe('playlists', pl);
+  syncBackup();
 }
 
 // Reinjecte dans l'etat (et IndexedDB) les entrees presentes dans le mirror

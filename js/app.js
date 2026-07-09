@@ -11,6 +11,7 @@ import {
 } from './views.js';
 import { isConfigured } from './config.js';
 import { renderOnboarding } from './onboarding.js';
+import { initSync } from './sync.js';
 
 const TABS = [
   { hash: '#/home', label: 'Accueil', icon: 'home' },
@@ -217,6 +218,14 @@ async function boot() {
     try { await navigator.storage.persist(); } catch { /* ignore */ }
   }
   await loadState();
+
+  // Synchro distante : gere un eventuel retour OAuth et adopte le snapshot
+  // distant s'il est plus recent (peut fournir la config TMDB sur un nouvel
+  // appareil). Silencieux et sans blocage si hors ligne / non configure.
+  try {
+    const { langChanged } = await initSync();
+    if (langChanged) { location.reload(); return; }
+  } catch (e) { console.warn('[bobine] initSync', e); }
 
   // Premiere ouverture (aucun acces TMDB configure) : ecran d'onboarding.
   // Le routing ne demarre qu'une fois l'acces valide.

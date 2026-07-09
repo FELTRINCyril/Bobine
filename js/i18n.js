@@ -239,6 +239,17 @@ const EN = {
   'Proxy': 'Proxy',
   "Reconfigurer l'acces": 'Reconfigure access',
 
+  // Sauvegarde / synchronisation
+  'Sauvegarde et synchronisation': 'Backup & sync',
+  'Connecte :': 'Connected:',
+  'Synchroniser maintenant': 'Sync now',
+  'Synchronisation...': 'Syncing...',
+  'Synchronise': 'Synced',
+  'Se deconnecter du cloud': 'Disconnect from cloud',
+  'Se connecter avec Dropbox': 'Connect with Dropbox',
+  'Synchronise tes donnees pour les retrouver sur un autre appareil et survivre a une desinstallation. Google Drive arrive bientot.': 'Sync your data to find it on another device and survive an uninstall. Google Drive coming soon.',
+  "La synchro cloud necessite HTTPS (ou localhost). Deploie l'app pour l'utiliser sur mobile.": 'Cloud sync requires HTTPS (or localhost). Deploy the app to use it on mobile.',
+
   // Divers
   'sur': 'of',
   'Remonter en haut': 'Back to top',
