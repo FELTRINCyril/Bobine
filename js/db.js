@@ -50,6 +50,19 @@ async function idbDel(store, key) {
   });
 }
 
+// Ecritures IndexedDB tolerantes aux pannes (quota, mode prive, base
+// indisponible) : on n'interrompt jamais l'action utilisateur. L'etat en
+// memoire + la copie localStorage prennent le relais. Voir SECURITE.md.
+async function idbPutSafe(store, value) {
+  try { await idbPut(store, value); return true; }
+  catch (e) { console.warn(`[bobine] ecriture IndexedDB (${store}) echouee`, e); return false; }
+}
+
+async function idbDelSafe(store, key) {
+  try { await idbDel(store, key); return true; }
+  catch (e) { console.warn(`[bobine] suppression IndexedDB (${store}) echouee`, e); return false; }
+}
+
 // ---- Etat en memoire (source de verite apres load) ----
 
 export const state = {
@@ -59,6 +72,22 @@ export const state = {
 
 const BACKUP_KEY = 'bobine_backup_v1';
 
+// Sante de la copie de secours localStorage. Passe a false si une sauvegarde
+// echoue (quota ~5 Mo depasse le plus souvent). Un evenement est emis une
+// seule fois par degradation pour que l'UI puisse avertir. IndexedDB reste la
+// source de verite : un backup KO ne perd pas les donnees de la session.
+let backupHealthy = true;
+export const isBackupHealthy = () => backupHealthy;
+
+function flagBackup(ok) {
+  if (ok === backupHealthy) return;
+  backupHealthy = ok;
+  if (!ok) {
+    console.warn('[bobine] copie de secours localStorage indisponible (quota ?)');
+    try { window.dispatchEvent(new CustomEvent('bobine:backup-degraded')); } catch { /* pas de window */ }
+  }
+}
+
 export function syncBackup() {
   try {
     localStorage.setItem(BACKUP_KEY, JSON.stringify({
@@ -66,36 +95,51 @@ export function syncBackup() {
       items: [...state.items.values()],
       playlists: [...state.playlists.values()],
     }));
-  } catch { /* quota depassee */ }
+    flagBackup(true);
+  } catch {
+    flagBackup(false);
+  }
 }
 
-async function restoreFromBackup() {
-  try {
-    const bak = JSON.parse(localStorage.getItem(BACKUP_KEY) || 'null');
-    if (!bak?.items?.length && !bak?.playlists?.length) return false;
-    for (const it of bak.items || []) {
+// Reinjecte dans l'etat (et IndexedDB) les entrees presentes dans le mirror
+// mais absentes d'IndexedDB - cas d'une base purgee ou partiellement corrompue.
+// Le mirror est reecrit apres chaque suppression, donc il ne contient jamais
+// d'element efface : ce merge ne peut pas ressusciter un titre supprime.
+async function reconcileBackup() {
+  let bak;
+  try { bak = JSON.parse(localStorage.getItem(BACKUP_KEY) || 'null'); }
+  catch { return 0; }
+  if (!bak) return 0;
+  let restored = 0;
+  for (const it of bak.items || []) {
+    if (!state.items.has(it.id)) {
       state.items.set(it.id, it);
-      await idbPut('items', it);
+      await idbPutSafe('items', it);
+      restored++;
     }
-    for (const pl of bak.playlists || []) {
-      state.playlists.set(pl.id, pl);
-      await idbPut('playlists', pl);
-    }
-    return true;
-  } catch {
-    return false;
   }
+  for (const pl of bak.playlists || []) {
+    if (!state.playlists.has(pl.id)) {
+      state.playlists.set(pl.id, pl);
+      await idbPutSafe('playlists', pl);
+      restored++;
+    }
+  }
+  return restored;
 }
 
 export async function loadState() {
-  const [items, playlists] = await Promise.all([idbAll('items'), idbAll('playlists')]);
-  if (!items.length && !playlists.length) {
-    await restoreFromBackup();
-  } else {
-    for (const it of items) state.items.set(it.id, it);
-    for (const pl of playlists) state.playlists.set(pl.id, pl);
-    syncBackup();
+  let items = [];
+  let playlists = [];
+  try {
+    [items, playlists] = await Promise.all([idbAll('items'), idbAll('playlists')]);
+  } catch (e) {
+    console.warn('[bobine] IndexedDB indisponible, lecture de la copie locale seule', e);
   }
+  for (const it of items) state.items.set(it.id, it);
+  for (const pl of playlists) state.playlists.set(pl.id, pl);
+  await reconcileBackup();
+  syncBackup();
 }
 
 // ---- Items ----
@@ -164,9 +208,9 @@ export async function saveItem(it) {
   it.updatedAt = Date.now();
   if (isBlank(it)) {
     state.items.delete(it.id);
-    await idbDel('items', it.id);
+    await idbDelSafe('items', it.id);
   } else {
-    await idbPut('items', it);
+    await idbPutSafe('items', it);
   }
   syncBackup();
 }
@@ -264,24 +308,24 @@ export function createPlaylist(name) {
     createdAt: Date.now(),
   };
   state.playlists.set(pl.id, pl);
-  idbPut('playlists', pl);
+  idbPutSafe('playlists', pl);
   syncBackup();
   return pl;
 }
 
 export async function savePlaylist(pl) {
-  await idbPut('playlists', pl);
+  await idbPutSafe('playlists', pl);
   syncBackup();
 }
 
 export async function deletePlaylist(id) {
   state.playlists.delete(id);
-  await idbDel('playlists', id);
+  await idbDelSafe('playlists', id);
   // purge les items devenus orphelins
   for (const it of [...state.items.values()]) {
     if (isBlank(it)) {
       state.items.delete(it.id);
-      await idbDel('items', it.id);
+      await idbDelSafe('items', it.id);
     }
   }
   syncBackup();
@@ -310,11 +354,11 @@ export async function importJson(text) {
   }
   for (const it of data.items) {
     state.items.set(it.id, it);
-    await idbPut('items', it);
+    await idbPutSafe('items', it);
   }
   for (const pl of data.playlists || []) {
     state.playlists.set(pl.id, pl);
-    await idbPut('playlists', pl);
+    await idbPutSafe('playlists', pl);
   }
   syncBackup();
   return { items: data.items.length, playlists: (data.playlists || []).length };

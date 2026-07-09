@@ -192,7 +192,9 @@ const EN = {
   'Visionnages films': 'Movie plays',
   'Films anime vus': 'Anime movies watched',
   'Ep. anime vus': 'Anime ep. watched',
-  'Donnees stockees sur cet appareil (IndexedDB + copie de secours locale).': 'Data stored on this device (IndexedDB + local backup copy).',
+  "Donnees 100% locales a cet appareil. Desinstaller l'app (ou la retirer de l'ecran d'accueil) efface tout, copie de secours comprise.": 'Data is 100% local to this device. Deleting the app (or removing it from the home screen) erases everything, backup copy included.',
+  'Copie de secours locale saturee : exporte tes donnees pour ne rien perdre.': 'Local backup is full: export your data so nothing is lost.',
+  'Sauvegarde locale saturee : pense a exporter.': 'Local backup full: consider exporting.',
   'Pour ne pas perdre tes donnees, exporte-les regulierement depuis ce menu.': 'To avoid losing your data, export it regularly from this menu.',
   "Ce produit utilise l'API TMDB mais n'est ni approuve ni certifie par TMDB.": 'This product uses the TMDB API but is not endorsed or certified by TMDB.',
 

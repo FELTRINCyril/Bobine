@@ -1273,6 +1273,11 @@ a.stat:active { background: var(--surface-2); transform: scale(0.98); }
   text-align: center;
   line-height: 1.6;
 }
+.credit-warn {
+  color: var(--accent);
+  font-weight: 600;
+  padding-bottom: 0;
+}
 
 /* ---------- Recherche ---------- */
 

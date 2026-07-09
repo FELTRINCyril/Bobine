@@ -5,7 +5,10 @@ import { getConfig, isV4Token } from './config.js';
 const BASE = 'https://api.themoviedb.org/3';
 const IMG = 'https://image.tmdb.org/t/p/';
 
+// Cache memoire des reponses TMDB (session). Borne en FIFO pour ne pas croitre
+// indefiniment sur une longue session de navigation.
 const cache = new Map();
+const CACHE_MAX = 300;
 
 // Langue du contenu TMDB (titres, synopsis...), reglable dans les parametres
 const LANG_KEY = 'bobine_lang';
@@ -36,6 +39,7 @@ async function get(path, params = {}) {
   if (!res.ok) throw new Error(`TMDB ${res.status} sur ${path}`);
   const data = await res.json();
   cache.set(cacheKey, data);
+  if (cache.size > CACHE_MAX) cache.delete(cache.keys().next().value);
   return data;
 }
 

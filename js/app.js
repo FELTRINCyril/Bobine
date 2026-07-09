@@ -1,6 +1,6 @@
 // Bobine - point d'entree : router + tab bar
 import { loadState } from './db.js';
-import { h, I, posterCard } from './ui.js';
+import { h, I, posterCard, toast } from './ui.js';
 import { tr } from './i18n.js';
 import { toggleWatchlist } from './actions.js';
 import {
@@ -204,6 +204,9 @@ function bindScrollUi() {
 
 async function boot() {
   applyTheme(getTheme());
+  // Copie de secours locale saturee (quota) : on previent une seule fois.
+  window.addEventListener('bobine:backup-degraded',
+    () => toast(tr('Sauvegarde locale saturee : pense a exporter.')), { once: true });
   const rotateMsg = document.querySelector('#rotate-lock p');
   if (rotateMsg) rotateMsg.innerHTML = `${tr('Bobine se regarde en portrait.')}<br>${tr('Remets ton telephone dans le bon sens !')}`;
   buildTabbar();

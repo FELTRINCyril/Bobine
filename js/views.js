@@ -6,7 +6,7 @@ import {
   state, getItem, saveItem, isSeen, isStarted, tvProgress,
   watchedEpisodeCount, totalEpisodePlays, computeStats, formatDuration,
   savePlaylist, deletePlaylist, createPlaylist,
-  exportJson, importJson, ensureItem,
+  exportJson, importJson, ensureItem, isBackupHealthy,
 } from './db.js';
 import { findUniverse } from './universes.js';
 import { getConfig, resetConfig } from './config.js';
@@ -1244,9 +1244,13 @@ export function renderProfile() {
     settings.appendChild(row);
   }
 
+  if (!isBackupHealthy()) {
+    page.appendChild(h(`<p class="credit credit-warn">${tr('Copie de secours locale saturee : exporte tes donnees pour ne rien perdre.')}</p>`));
+  }
+
   page.appendChild(h(`
     <p class="credit">
-      ${tr('Donnees stockees sur cet appareil (IndexedDB + copie de secours locale).')}<br>
+      ${tr("Donnees 100% locales a cet appareil. Desinstaller l'app (ou la retirer de l'ecran d'accueil) efface tout, copie de secours comprise.")}<br>
       ${tr('Pour ne pas perdre tes donnees, exporte-les regulierement depuis ce menu.')}<br>
       ${tr("Ce produit utilise l'API TMDB mais n'est ni approuve ni certifie par TMDB.")}
     </p>
