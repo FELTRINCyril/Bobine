@@ -128,4 +128,4 @@ export async function push(doc) {
   if (!res.ok) throw new Error(`dropbox upload ${res.status}`);
 }
 
-export const adapter = { id: 'dropbox', beginAuth, isRedirectCallback, completeAuth, pull, push };
+export const adapter = { id: 'dropbox', usesRedirect: true, beginAuth, isRedirectCallback, completeAuth, pull, push };

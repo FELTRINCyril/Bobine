@@ -1666,17 +1666,22 @@ export function renderSettings() {
     offBtn.addEventListener('click', () => { disconnect(); renderSettings(); });
     box.append(syncBtn, offBtn);
   } else {
+    // OAuth (crypto.subtle / popup) exige un contexte securise : HTTPS ou localhost.
+    const secureGuard = () => {
+      if (window.isSecureContext) return true;
+      toast(tr('La synchro cloud necessite HTTPS (ou localhost). Deploie l\'app pour l\'utiliser sur mobile.'));
+      return false;
+    };
     const dbxBtn = h(`<button class="set-row">${I.globe}<span>${tr('Se connecter avec Dropbox')}</span><span class="chev">${I.chevRight}</span></button>`);
-    dbxBtn.addEventListener('click', () => {
-      // OAuth/PKCE (crypto.subtle) exige un contexte securise : HTTPS ou localhost.
-      if (!window.isSecureContext) {
-        toast(tr('La synchro cloud necessite HTTPS (ou localhost). Deploie l\'app pour l\'utiliser sur mobile.'));
-        return;
-      }
-      connect('dropbox');
+    dbxBtn.addEventListener('click', () => { if (secureGuard()) connect('dropbox'); });
+    const gdBtn = h(`<button class="set-row">${I.globe}<span>${tr('Se connecter avec Google Drive')}</span><span class="chev">${I.chevRight}</span></button>`);
+    gdBtn.addEventListener('click', async () => {
+      if (!secureGuard()) return;
+      try { await connect('gdrive'); toast(tr('Synchronise')); renderSettings(); }
+      catch { toast(tr('Connexion annulee')); }
     });
-    box.appendChild(dbxBtn);
-    box.appendChild(h(`<p class="settings-note">${tr('Synchronise tes donnees pour les retrouver sur un autre appareil et survivre a une desinstallation. Google Drive arrive bientot.')}</p>`));
+    box.append(dbxBtn, gdBtn);
+    box.appendChild(h(`<p class="settings-note">${tr('Synchronise tes donnees pour les retrouver sur un autre appareil et survivre a une desinstallation.')}</p>`));
   }
 
   // ---- Mise a jour ----

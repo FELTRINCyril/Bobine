@@ -247,6 +247,9 @@ const EN = {
   'Synchronise': 'Synced',
   'Se deconnecter du cloud': 'Disconnect from cloud',
   'Se connecter avec Dropbox': 'Connect with Dropbox',
+  'Se connecter avec Google Drive': 'Connect with Google Drive',
+  'Connexion annulee': 'Connection cancelled',
+  'Synchronise tes donnees pour les retrouver sur un autre appareil et survivre a une desinstallation.': 'Sync your data to find it on another device and survive an uninstall.',
   'Synchronise tes donnees pour les retrouver sur un autre appareil et survivre a une desinstallation. Google Drive arrive bientot.': 'Sync your data to find it on another device and survive an uninstall. Google Drive coming soon.',
   "La synchro cloud necessite HTTPS (ou localhost). Deploie l'app pour l'utiliser sur mobile.": 'Cloud sync requires HTTPS (or localhost). Deploy the app to use it on mobile.',
 

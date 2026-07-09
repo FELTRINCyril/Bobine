@@ -6,9 +6,10 @@ import {
   getProvider, setProvider, clearSync, hasSync, buildSnapshot, applySnapshot,
 } from './storage/index.js';
 import { adapter as dropbox } from './storage/dropbox.js';
+import { adapter as gdrive } from './storage/googledrive.js';
 
-// Registre des fournisseurs. Google Drive sera ajoute ici.
-const REGISTRY = { dropbox };
+// Registre des fournisseurs de stockage.
+const REGISTRY = { dropbox, gdrive };
 
 const current = () => REGISTRY[getProvider()] || null;
 
@@ -77,10 +78,17 @@ window.addEventListener('bobine:changed', () => {
   schedulePush();
 });
 
-// Demarre la connexion a un fournisseur (redirection OAuth).
-export function connect(providerId) {
+// Demarre la connexion a un fournisseur.
+// - modele redirection (Dropbox) : quitte la page ; le provider est active au
+//   retour, dans initSync.
+// - modele popup (Google Drive) : on attend le jeton, puis on active + synchro.
+export async function connect(providerId) {
   const ad = REGISTRY[providerId];
-  if (ad) ad.beginAuth();
+  if (!ad) return;
+  if (ad.usesRedirect) { ad.beginAuth(); return; }
+  await ad.beginAuth();
+  setProvider(providerId);
+  await syncNow();
 }
 
 export function disconnect() {
