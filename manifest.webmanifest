@@ -2,7 +2,7 @@
   "name": "Bobine",
   "short_name": "Bobine",
   "description": "Suivi de films, series et animes",
-  "start_url": "./index.html",
+  "start_url": "./",
   "scope": "./",
   "display": "standalone",
   "orientation": "portrait",

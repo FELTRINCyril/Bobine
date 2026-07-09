@@ -11,9 +11,15 @@ const UL = 'https://content.dropboxapi.com/2/files/upload';
 const PATH = '/' + REMOTE_FILE;
 const K_VERIFIER = 'bobine_dbx_verifier';
 
-// URL de redirection = origine + chemin de l'app (sans hash ni query). Doit
-// correspondre exactement a une URI declaree dans la console Dropbox.
-const redirectUri = () => location.origin + location.pathname;
+// URL de redirection : origine + dossier de l'app, normalisee (on retire un
+// eventuel 'index.html' et on garantit le slash final) pour valoir toujours la
+// meme chose - qu'on soit lance depuis '/Bobine/' ou '/Bobine/index.html' (cas
+// de la PWA installee). Doit correspondre exactement a l'URI declaree cote
+// fournisseur.
+const redirectUri = () => {
+  const dir = location.pathname.replace(/[^/]*\.html$/, '');
+  return location.origin + (dir.endsWith('/') ? dir : dir + '/');
+};
 
 // ---- PKCE ----
 function randomVerifier() {
