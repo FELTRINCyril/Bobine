@@ -3,9 +3,12 @@
 // soit sa propre cle TMDB, soit d'utiliser le proxy. Aucun secret embarque.
 import { h } from './ui.js';
 import { tr } from './i18n.js';
-import { useKey, useProxy, hasDefaultProxy, DEFAULT_PROXY, isV4Token } from './config.js';
+import { useKey, useProxy, hasDefaultProxy, DEFAULT_PROXY, isV4Token, isConfigured } from './config.js';
+import { connect, uploadLocal } from './sync.js';
+import { hasSync, getProvider } from './storage/index.js';
 
 const TMDB_API_URL = 'https://www.themoviedb.org/settings/api';
+const PROVIDER_LABEL = { dropbox: 'Dropbox', gdrive: 'Google Drive' };
 
 // Verifie qu'un acces fonctionne avant de l'enregistrer (feedback immediat).
 async function testAccess({ mode, value }) {
@@ -56,6 +59,7 @@ export function renderOnboarding(onDone) {
       const ok = await test();
       if (!ok) { setStatus(tr('Acces refuse par TMDB. Verifie et reessaie.')); return; }
       saveFn();
+      if (hasSync()) await uploadLocal();
       onDone();
     } catch {
       setStatus(tr('Impossible de contacter TMDB (hors ligne ?).'));
@@ -63,6 +67,53 @@ export function renderOnboarding(onDone) {
       busy(btn, false);
     }
   }
+
+  // ---- Synchro cloud (recuperer des donnees existantes) ----
+  const cloudBox = h('<div class="onb-cloud"></div>');
+  cloudBox.appendChild(h(`<h2 class="onb-cloud-title">${tr('Deja des donnees sur le cloud ?')}</h2>`));
+  if (hasSync()) {
+    const p = getProvider();
+    cloudBox.appendChild(h(`<p class="onb-hint onb-cloud-ok">${tr('Connecte :')} ${PROVIDER_LABEL[p] || p}</p>`));
+  } else {
+    cloudBox.appendChild(h(`<p class="onb-hint">${tr('Connecte-toi pour recuperer tes donnees sur cet appareil.')}</p>`));
+    const cloudBtns = h('<div class="onb-cloud-btns"></div>');
+    const gdBtn = h(`<button class="btn ghost onb-cloud-btn">${tr('Google Drive')}</button>`);
+    const dbxBtn = h(`<button class="btn ghost onb-cloud-btn">${tr('Dropbox')}</button>`);
+    cloudBtns.append(gdBtn, dbxBtn);
+    cloudBox.appendChild(cloudBtns);
+
+    async function tryCloud(providerId, btn) {
+      if (!window.isSecureContext) {
+        setStatus(tr('La synchro cloud necessite HTTPS (ou localhost). Deploie l\'app pour l\'utiliser sur mobile.'));
+        return;
+      }
+      busy(btn, true);
+      setStatus(tr('Synchronisation...'));
+      try {
+        if (providerId === 'dropbox') {
+          connect('dropbox');
+          return;
+        }
+        const r = await connect('gdrive');
+        if (r.langChanged) { location.reload(); return; }
+        if (isConfigured()) {
+          setStatus(tr('Donnees recuperees !'), true);
+          setTimeout(onDone, 500);
+        } else {
+          setStatus(tr('Connecte ! Configure l\'acces TMDB ci-dessous pour commencer.'), true);
+        }
+      } catch {
+        setStatus(tr('Connexion annulee'));
+      } finally {
+        busy(btn, false);
+      }
+    }
+
+    gdBtn.addEventListener('click', () => tryCloud('gdrive', gdBtn));
+    dbxBtn.addEventListener('click', () => tryCloud('dropbox', dbxBtn));
+  }
+  page.appendChild(cloudBox);
+  page.appendChild(h(`<p class="onb-divider"><span>${tr('ou')}</span></p>`));
 
   // ---- Mode simple : proxy par defaut (si deploye) ----
   if (hasDefaultProxy()) {

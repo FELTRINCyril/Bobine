@@ -410,3 +410,19 @@ export async function importJson(text) {
   syncBackup();
   return { items: data.items.length, playlists: (data.playlists || []).length };
 }
+
+// Efface toutes les donnees de visionnage (memoire, IndexedDB, copie locale).
+// N'emet pas bobine:changed : l'appelant doit couper la synchro si besoin.
+export async function clearAllData() {
+  state.items.clear();
+  state.playlists.clear();
+  try {
+    await idbClear('items');
+    await idbClear('playlists');
+  } catch (e) { console.warn('[bobine] purge IndexedDB echouee', e); }
+  try {
+    localStorage.removeItem(BACKUP_KEY);
+    localStorage.removeItem(MTIME_KEY);
+  } catch { /* quota */ }
+  backupHealthy = true;
+}

@@ -1265,6 +1265,53 @@ a.stat:active { background: var(--surface-2); transform: scale(0.98); }
 
 .set-row svg { width: 19px; height: 19px; color: var(--text-muted); flex: none; }
 .set-row .chev { margin-left: auto; color: var(--text-faint); }
+.set-row--danger { color: var(--accent); }
+.set-row--danger svg { color: var(--accent); }
+
+.settings-title--danger { color: var(--accent); }
+.settings-note--danger { color: var(--accent); opacity: 0.85; }
+
+.reset-sheet h3 { margin: 0 0 12px; font-size: 17px; }
+.reset-warn {
+  color: var(--accent);
+  font-size: 14px;
+  line-height: 1.5;
+  margin: 0 0 16px;
+}
+.reset-hint { font-size: 13px; color: var(--text-muted); margin: 0 0 6px; }
+.reset-phrase {
+  font-family: ui-monospace, monospace;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  border: 1px solid var(--line);
+}
+.reset-input { margin-bottom: 14px; }
+.reset-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-bottom: 18px;
+  cursor: pointer;
+}
+.reset-check input { margin-top: 3px; flex: none; }
+.reset-actions {
+  display: flex;
+  gap: 10px;
+}
+.reset-actions .btn { flex: 1; }
+.reset-confirm {
+  background: var(--accent);
+  color: #fff;
+}
+.reset-confirm:disabled { opacity: 0.4; pointer-events: none; }
+.reset-confirm.loading { opacity: 0.6; pointer-events: none; }
 
 .credit {
   padding: 22px 18px;
@@ -1730,3 +1777,40 @@ body.onboarding-on .scrolltop { display: none; }
 .onb-status { margin-top: 16px; font-size: 14px; min-height: 20px; }
 .onb-status.err { color: var(--accent); }
 .onb-status.ok { color: var(--seen); }
+
+.onb-cloud {
+  margin-bottom: 8px;
+  padding: 16px;
+  border-radius: var(--radius);
+  background: var(--surface);
+  border: 1px solid var(--border);
+}
+.onb-cloud-title {
+  font-size: 15px;
+  font-weight: 700;
+  margin: 0 0 8px;
+}
+.onb-cloud-btns {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 12px;
+}
+.onb-cloud-btn { width: 100%; }
+.onb-cloud-ok { color: var(--seen); margin: 0; }
+.onb-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--text-faint);
+  font-size: 13px;
+  margin: 20px 0;
+}
+.onb-divider::before,
+.onb-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+.onb-divider span { flex-shrink: 0; }

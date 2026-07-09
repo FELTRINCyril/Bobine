@@ -8,6 +8,7 @@ const AUTHORIZE = 'https://www.dropbox.com/oauth2/authorize';
 const TOKEN = 'https://api.dropboxapi.com/oauth2/token';
 const DL = 'https://content.dropboxapi.com/2/files/download';
 const UL = 'https://content.dropboxapi.com/2/files/upload';
+const DEL = 'https://api.dropboxapi.com/2/files/delete_v2';
 const PATH = '/' + REMOTE_FILE;
 const K_VERIFIER = 'bobine_dbx_verifier';
 
@@ -128,4 +129,18 @@ export async function push(doc) {
   if (!res.ok) throw new Error(`dropbox upload ${res.status}`);
 }
 
-export const adapter = { id: 'dropbox', usesRedirect: true, beginAuth, isRedirectCallback, completeAuth, pull, push };
+export async function wipe() {
+  const at = await accessToken();
+  const res = await fetch(DEL, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${at}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ path: PATH }),
+  });
+  if (res.status === 409) return;
+  if (!res.ok) throw new Error(`dropbox delete ${res.status}`);
+}
+
+export const adapter = { id: 'dropbox', usesRedirect: true, beginAuth, isRedirectCallback, completeAuth, pull, push, wipe };

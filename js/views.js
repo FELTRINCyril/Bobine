@@ -10,7 +10,7 @@ import {
 } from './db.js';
 import { findUniverse } from './universes.js';
 import { getConfig, resetConfig } from './config.js';
-import { connect, disconnect, syncNow, syncStatus } from './sync.js';
+import { connect, disconnect, syncNow, syncStatus, resetAllData } from './sync.js';
 import { hasSync } from './storage/index.js';
 import {
   h, esc, I, posterCard, castCard, openSheet, toast, emptyState, spinner,
@@ -1586,6 +1586,65 @@ async function checkForUpdate(statusEl) {
   }
 }
 
+function resetConfirmPhrase() {
+  return isEn() ? 'DELETE ALL' : 'SUPPRIMER TOUT';
+}
+
+function openDataResetSheet() {
+  const phrase = resetConfirmPhrase();
+  const cloud = hasSync();
+  const body = h(`
+    <div class="reset-sheet">
+      <h3>${tr('Reinitialiser toutes les donnees')}</h3>
+      <p class="reset-warn">${cloud
+    ? tr('Action irreversible. Toutes tes donnees seront effacees sur cet appareil ET sur ton compte cloud connecte.')
+    : tr('Action irreversible. Toutes tes donnees seront effacees sur cet appareil.')}</p>
+      <p class="reset-hint">${tr('Pour confirmer, tape exactement :')}</p>
+      <p class="reset-phrase">${esc(phrase)}</p>
+      <input class="sheet-input reset-input" type="text" autocomplete="off" autocapitalize="characters" spellcheck="false"
+             placeholder="${esc(phrase)}">
+      <label class="reset-check">
+        <input type="checkbox">
+        <span>${tr('Je comprends que cette action est definitive')}</span>
+      </label>
+      <div class="reset-actions">
+        <button class="btn ghost reset-cancel">${tr('Annuler')}</button>
+        <button class="btn reset-confirm" disabled>${tr('Tout supprimer')}</button>
+      </div>
+    </div>
+  `);
+  const close = openSheet(body);
+  const input = body.querySelector('.reset-input');
+  const check = body.querySelector('input[type="checkbox"]');
+  const confirm = body.querySelector('.reset-confirm');
+  const cancel = body.querySelector('.reset-cancel');
+
+  const refresh = () => {
+    const ok = input.value.trim() === phrase && check.checked;
+    confirm.disabled = !ok;
+  };
+  input.addEventListener('input', refresh);
+  check.addEventListener('change', refresh);
+  cancel.addEventListener('click', close);
+  confirm.addEventListener('click', async () => {
+    if (input.value.trim() !== phrase || !check.checked) return;
+    confirm.disabled = true;
+    confirm.classList.add('loading');
+    try {
+      await resetAllData();
+      close();
+      toast(tr('Donnees reinitialisees'));
+      location.hash = '#/home';
+      location.reload();
+    } catch {
+      toast(tr('Reinitialisation echouee'));
+      confirm.disabled = false;
+      confirm.classList.remove('loading');
+    }
+  });
+  setTimeout(() => input.focus(), 120);
+}
+
 export function renderSettings() {
   const v = $view();
   v.innerHTML = '';
@@ -1612,7 +1671,6 @@ export function renderSettings() {
     const b = e.target.closest('.seg-btn');
     if (!b) return;
     applyTheme(b.dataset.t);
-    touch();
     syncTheme();
   });
   box.appendChild(themeSeg);
@@ -1664,7 +1722,13 @@ export function renderSettings() {
       toast(tr('Synchronise'));
     });
     const offBtn = h(`<button class="set-row">${I.globe}<span>${tr('Se deconnecter du cloud')}</span><span class="chev">${I.chevRight}</span></button>`);
-    offBtn.addEventListener('click', () => { disconnect(); renderSettings(); });
+    offBtn.addEventListener('click', async () => {
+      if (!confirm(tr('La deconnexion supprimera toutes les donnees de cet appareil. Continuer ?'))) return;
+      await disconnect();
+      toast(tr('Deconnecte'));
+      location.hash = '#/home';
+      location.reload();
+    });
     box.append(syncBtn, offBtn);
   } else {
     // OAuth (crypto.subtle / popup) exige un contexte securise : HTTPS ou localhost.
@@ -1678,12 +1742,25 @@ export function renderSettings() {
     const gdBtn = h(`<button class="set-row">${I.globe}<span>${tr('Se connecter avec Google Drive')}</span><span class="chev">${I.chevRight}</span></button>`);
     gdBtn.addEventListener('click', async () => {
       if (!secureGuard()) return;
-      try { await connect('gdrive'); toast(tr('Synchronise')); renderSettings(); }
-      catch { toast(tr('Connexion annulee')); }
+      try {
+        const r = await connect('gdrive');
+        if (r.langChanged) { location.reload(); return; }
+        toast(tr('Synchronise'));
+        renderSettings();
+      } catch { toast(tr('Connexion annulee')); }
     });
     box.append(dbxBtn, gdBtn);
     box.appendChild(h(`<p class="settings-note">${tr('Synchronise tes donnees pour les retrouver sur un autre appareil et survivre a une desinstallation.')}</p>`));
   }
+
+  // ---- Zone de danger ----
+  box.appendChild(h(`<h2 class="settings-title settings-title--danger">${tr('Zone de danger')}</h2>`));
+  const resetBtn = h(`<button class="set-row set-row--danger">${I.trash}<span>${tr('Reinitialiser toutes les donnees')}</span><span class="chev">${I.chevRight}</span></button>`);
+  resetBtn.addEventListener('click', openDataResetSheet);
+  box.appendChild(resetBtn);
+  box.appendChild(h(`<p class="settings-note settings-note--danger">${hasSync()
+    ? tr('Efface les donnees locales et le fichier cloud. Action irreversible.')
+    : tr('Efface toutes les donnees locales. Action irreversible.')}</p>`));
 
   // ---- Mise a jour ----
   box.appendChild(h(`<h2 class="settings-title">${tr('Application')}</h2>`));

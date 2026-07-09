@@ -106,4 +106,16 @@ export async function push(doc) {
   }
 }
 
-export const adapter = { id: 'gdrive', usesRedirect: false, beginAuth, isRedirectCallback, completeAuth, pull, push };
+export async function wipe() {
+  const at = await accessToken();
+  const id = await findId(at);
+  if (!id) return;
+  const res = await fetch(`${API}/files/${id}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${at}` },
+  });
+  if (!res.ok) throw new Error(`gdrive delete ${res.status}`);
+  fileId = null;
+}
+
+export const adapter = { id: 'gdrive', usesRedirect: false, beginAuth, isRedirectCallback, completeAuth, pull, push, wipe };
