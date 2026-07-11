@@ -10,7 +10,8 @@ import {
 } from './db.js';
 import { findUniverse } from './universes.js';
 import { getConfig, resetConfig } from './config.js';
-import { SKINS, getSkin, getMode, applyAppearance } from './themes.js';
+import { SKINS, getSkin, getMode, getSkinInfo, openThemePicker } from './themes.js';
+import { openConfirmSheet } from './confirm.js';
 import { bindInfiniteScroll } from './scrollLoad.js';
 import { disconnect, syncNow, syncStatus, resetAllData } from './sync.js';
 import { hasSync } from './storage/index.js';
@@ -20,7 +21,7 @@ import {
   mediaTitle, mediaYear, mediaType, typeLabel, isReleased,
 } from './ui.js';
 import {
-  toggleFavorite, toggleWatchlist, setMoviePlays, setEpisodePlays,
+  toggleFavorite, toggleAdd, setMoviePlays, setEpisodePlays,
   markSeason, updateItemTotals, openPlaylistSheet,
   cacheEpisodeRuntimes, syncTvRuntimes,
 } from './actions.js';
@@ -284,7 +285,7 @@ export async function renderHome() {
         posterCard(mediaFromItem(it), { type: it.type, sub: typeLabel(it.type, it.isAnime), noQuick: true })
       );
     }
-    body.appendChild(section(tr('Ma watchlist'), row, '#/watchlist'));
+    body.appendChild(section(tr('Ma liste'), row, '#/watchlist'));
   }
 
   // Rangees de contenu : les 2 premieres chargent tout de suite,
@@ -487,18 +488,23 @@ export async function renderDetail(type, id) {
   const meta = metaFrom(d, type);
   page.innerHTML = '';
 
-  // Memorise durees pour les stats
-  const tracked = ensureItem(meta);
-  if (type === 'movie' && d.runtime) tracked.runtime = d.runtime;
-  if (type === 'tv' && d.episode_run_time?.length) {
-    tracked.episodeRuntime = Math.round(
-      d.episode_run_time.reduce((a, b) => a + b, 0) / d.episode_run_time.length
-    );
-  } else if (type === 'tv') {
-    tracked.episodeRuntime = tracked.episodeRuntime || 50;
+  // Memorise durees pour les stats (uniquement si le titre est deja suivi)
+  const existing = getItem(type, d.id);
+  if (existing) {
+    if (type === 'movie' && d.runtime) existing.runtime = d.runtime;
+    if (type === 'tv' && d.episode_run_time?.length) {
+      existing.episodeRuntime = Math.round(
+        d.episode_run_time.reduce((a, b) => a + b, 0) / d.episode_run_time.length
+      );
+    } else if (type === 'tv') {
+      existing.episodeRuntime = existing.episodeRuntime || 50;
+    }
+    meta.episodeRuntime = existing.episodeRuntime;
+    await saveItem(existing);
+  } else {
+    meta.episodeRuntime = type === 'tv' ? 50 : undefined;
+    if (type === 'movie' && d.runtime) meta.runtime = d.runtime;
   }
-  meta.episodeRuntime = tracked.episodeRuntime;
-  saveItem(tracked);
 
   // Hero
   const backdrop = img(d.backdrop_path, 'w780');
@@ -600,14 +606,14 @@ export async function renderDetail(type, id) {
     }
 
     const favBtn = h(`<button class="act ${fav ? 'on-fav' : ''}">${fav ? I.heartFill : I.heart}<span>${tr('Favori')}</span></button>`);
-    const wlBtn = h(`<button class="act ${wl ? 'on-list' : ''}">${wl ? I.bookmarkFill : I.bookmark}<span>${tr('Watchlist')}</span></button>`);
-    const plBtn = h(`<button class="act">${I.plus}<span>${tr('Playlist')}</span></button>`);
+    const addBtn = h(`<button class="act ${wl ? 'on-list' : ''}">${wl ? I.check : I.plus}<span>${wl ? tr('Ajoute') : tr('Ajouter')}</span></button>`);
+    const plBtn = h(`<button class="act">${I.list}<span>${tr('Playlist')}</span></button>`);
 
     favBtn.addEventListener('click', async () => { await toggleFavorite(meta); renderActions(); });
-    wlBtn.addEventListener('click', async () => { await toggleWatchlist(meta); renderActions(); });
+    addBtn.addEventListener('click', async () => { await toggleAdd(meta); renderActions(); });
     plBtn.addEventListener('click', () => openPlaylistSheet(meta));
 
-    btns.push(favBtn, wlBtn, plBtn);
+    btns.push(favBtn, addBtn, plBtn);
     actions.append(...btns);
   }
 
@@ -651,7 +657,51 @@ export async function renderDetail(type, id) {
   renderActions();
   renderPlaysBar();
 
-  // ---- Synopsis ----
+  // ---- Onglets fiche (2-3 pages selon le type) ----
+  const isTv = type === 'tv';
+  const tabDefs = isTv
+    ? [
+      { id: 'overview', label: tr('Apercu') },
+      { id: 'episodes', label: tr('Episodes') },
+      { id: 'more', label: tr('Casting') },
+    ]
+    : [
+      { id: 'overview', label: tr('Apercu') },
+      { id: 'more', label: tr('Casting') },
+    ];
+
+  const tabBar = h('<div class="detail-tabs" role="tablist"></div>');
+  const panelsWrap = h('<div class="detail-panels"></div>');
+  const panelOverview = h('<div class="detail-panel" data-panel="overview"></div>');
+  const panelEpisodes = isTv ? h('<div class="detail-panel" data-panel="episodes" hidden></div>') : null;
+  const panelMore = h('<div class="detail-panel" data-panel="more" hidden></div>');
+
+  let activeTab = tabDefs[0].id;
+
+  function showTab(id) {
+    activeTab = id;
+    tabBar.querySelectorAll('.detail-tab').forEach((b) => {
+      b.classList.toggle('on', b.dataset.tab === id);
+      b.setAttribute('aria-selected', b.dataset.tab === id ? 'true' : 'false');
+    });
+    for (const p of panelsWrap.querySelectorAll('.detail-panel')) {
+      p.hidden = p.dataset.panel !== id;
+    }
+  }
+
+  for (const t of tabDefs) {
+    const btn = h(`<button type="button" class="detail-tab${t.id === activeTab ? ' on' : ''}" data-tab="${t.id}" role="tab">${t.label}</button>`);
+    btn.setAttribute('aria-selected', t.id === activeTab ? 'true' : 'false');
+    btn.addEventListener('click', () => showTab(t.id));
+    tabBar.appendChild(btn);
+  }
+  page.appendChild(tabBar);
+  panelsWrap.append(panelOverview);
+  if (panelEpisodes) panelsWrap.append(panelEpisodes);
+  panelsWrap.append(panelMore);
+  page.appendChild(panelsWrap);
+
+  // -- Onglet Apercu : synopsis, plateformes, recommandations --
   if (d.overview) {
     const ov = h(`<p class="overview clamp">${esc(d.overview)}</p>`);
     const moreBtn = h(`<button class="overview-more">${tr('Lire la suite')}</button>`);
@@ -661,10 +711,9 @@ export async function renderDetail(type, id) {
     });
     const s = section(tr('Synopsis'), ov);
     s.querySelector('.section-pad').appendChild(moreBtn);
-    page.appendChild(s);
+    panelOverview.appendChild(s);
   }
 
-  // ---- Ou regarder (plateformes FR, donnees JustWatch via TMDB) ----
   const fr = d['watch/providers']?.results?.FR;
   if (fr) {
     const dedup = (arr) => {
@@ -693,21 +742,25 @@ export async function renderDetail(type, id) {
         box.appendChild(grp);
       }
       box.appendChild(h(`<p class="prov-credit">${tr('Source : JustWatch via TMDB (France)')}</p>`));
-      page.appendChild(section(tr('Ou regarder'), box));
+      panelOverview.appendChild(section(tr('Ou regarder'), box));
     }
   }
 
-  // ---- Saisons (series) ----
-  const seasonsHolder = h('<div></div>');
-  page.appendChild(seasonsHolder);
+  const recos = (d.recommendations?.results || []).filter((m) => m.media_type !== 'person').slice(0, 20);
+  if (recos.length) {
+    const sec = mediaSection(tr('Recommandations'), recos, type, `reco-${type}-${id}`);
+    if (sec) panelOverview.appendChild(sec);
+  }
+
+  // -- Onglet Episodes (series) --
+  const seasonsHolder = panelEpisodes || h('<div></div>');
 
   function renderSeasons() {
-    if (type !== 'tv') return;
+    if (!isTv || !panelEpisodes) return;
     seasonsHolder.innerHTML = '';
     const seasonBody = h('<div></div>');
     const wrap = section(tr('Episodes'), seasonBody);
     seasonsHolder.appendChild(wrap);
-
     for (const s of d.seasons || []) {
       if (s.season_number === 0) continue;
       seasonBody.appendChild(seasonBlock(meta, d, s, () => { renderActions(); renderPlaysBar(); }));
@@ -715,21 +768,11 @@ export async function renderDetail(type, id) {
   }
   renderSeasons();
 
-  // ---- Saga / Univers ----
-  // holder dedie : les sections saga chargent en asynchrone mais doivent
-  // rester avant les recommandations et le casting
+  // -- Onglet Casting : casting + sagas --
   const sagaHolder = h('<div></div>');
-  page.appendChild(sagaHolder);
+  panelMore.appendChild(sagaHolder);
   loadSagaSections(sagaHolder, d, type, id);
 
-  // ---- Recommandations ----
-  const recos = (d.recommendations?.results || []).filter((m) => m.media_type !== 'person').slice(0, 20);
-  if (recos.length) {
-    const sec = mediaSection(tr('Recommandations'), recos, type, `reco-${type}-${id}`);
-    if (sec) page.appendChild(sec);
-  }
-
-  // ---- Casting (tout en bas de la fiche) ----
   const cast = d.credits?.cast || [];
   if (cast.length) {
     const row = h('<div class="hscroll"><div class="hscroll-inner"></div></div>');
@@ -738,7 +781,7 @@ export async function renderDetail(type, id) {
     const link = cast.length > 12
       ? stashListing(`cast-${type}-${id}`, `${tr('Casting')} - ${meta.title}`, 'cast', cast)
       : null;
-    page.appendChild(section(tr('Casting'), row, link));
+    panelMore.appendChild(section(tr('Casting'), row, link));
   }
 }
 
@@ -986,7 +1029,7 @@ export function renderWatchlist() {
   const v = $view();
   v.innerHTML = '';
   const page = h('<div class="page"></div>');
-  page.appendChild(pageHead(tr('Watchlist'), { back: true }));
+  page.appendChild(pageHead(tr('Ma liste'), { back: true }));
   bindBack(page);
   v.appendChild(page);
 
@@ -1040,7 +1083,7 @@ export function renderWatchlist() {
 
     const any = renderByStatus(holder, items, itemStatus, renderGroup);
     if (!any) {
-      holder.appendChild(emptyState('bookmark', tr('Watchlist vide'), tr('Ajoute des films et series a voir plus tard.')));
+      holder.appendChild(emptyState('bookmark', tr('Liste vide'), tr('Ajoute des titres avec le bouton + sur les affiches.')));
     }
   }
 
@@ -1259,7 +1302,7 @@ export function renderProfile() {
   page.appendChild(settings);
 
   const links = [
-    ['bookmark', tr('Ma watchlist'), () => (location.hash = '#/watchlist')],
+    ['bookmark', tr('Ma liste'), () => (location.hash = '#/watchlist')],
     ['list', tr('Mes playlists'), () => (location.hash = '#/playlists')],
     ['popcorn', tr('Mes statistiques'), () => (location.hash = '#/stats')],
     ['settings', tr('Parametres'), () => (location.hash = '#/settings')],
@@ -1671,51 +1714,34 @@ export function renderSettings() {
 
   // ---- Apparence ----
   box.appendChild(h(`<h2 class="settings-title">${tr('Apparence')}</h2>`));
-
-  const themeGrid = h('<div class="theme-grid"></div>');
-  function syncSkinCards() {
-    themeGrid.querySelectorAll('.theme-card').forEach((c) => {
-      c.classList.toggle('on', c.dataset.skin === getSkin());
-    });
-  }
-  for (const sk of SKINS) {
-    const card = h(`
-      <button type="button" class="theme-card" data-skin="${sk.id}">
-        <span class="theme-card-preview">
-          <i style="background:${sk.preview[0]}"></i>
-          <i style="background:${sk.preview[1]}"></i>
-          <i style="background:${sk.preview[2]}"></i>
-        </span>
-        <span class="theme-card-name">${tr(sk.label)}</span>
-        <span class="theme-card-desc">${tr(sk.desc)}</span>
-      </button>
-    `);
-    card.addEventListener('click', () => {
-      applyAppearance(sk.id, getMode());
-      syncSkinCards();
-    });
-    themeGrid.appendChild(card);
-  }
-  syncSkinCards();
-  box.appendChild(themeGrid);
-
-  const modeSeg = h(`
-    <div class="seg">
-      <button class="seg-btn" data-m="dark">${I.moon}<span>${tr('Sombre')}</span></button>
-      <button class="seg-btn" data-m="light">${I.sun}<span>${tr('Clair')}</span></button>
-    </div>
+  const curSkin = getSkinInfo(getSkin());
+  const themeRow = h(`
+    <button type="button" class="set-row theme-current-row">
+      <span class="theme-current-preview">
+        <i style="background:${curSkin.preview[0]}"></i>
+        <i style="background:${curSkin.preview[1]}"></i>
+        <i style="background:${curSkin.preview[2]}"></i>
+      </span>
+      <span class="theme-current-info">
+        <span class="theme-current-name">${tr(curSkin.label)}</span>
+        <span class="theme-current-mode">${getMode() === 'light' ? tr('Clair') : tr('Sombre')}</span>
+      </span>
+      <span class="chev">${I.chevRight}</span>
+    </button>
   `);
-  const syncMode = () => modeSeg.querySelectorAll('.seg-btn')
-    .forEach((b) => b.classList.toggle('on', b.dataset.m === getMode()));
-  syncMode();
-  modeSeg.addEventListener('click', (e) => {
-    const b = e.target.closest('.seg-btn');
-    if (!b || b.dataset.m === getMode()) return;
-    applyAppearance(getSkin(), b.dataset.m);
-    syncMode();
+  themeRow.addEventListener('click', () => {
+    openThemePicker({
+      onPick: () => {
+        const sk = getSkinInfo(getSkin());
+        themeRow.querySelector('.theme-current-name').textContent = tr(sk.label);
+        themeRow.querySelector('.theme-current-mode').textContent = getMode() === 'light' ? tr('Clair') : tr('Sombre');
+        const prev = themeRow.querySelector('.theme-current-preview');
+        prev.querySelectorAll('i').forEach((el, i) => { el.style.background = sk.preview[i]; });
+      },
+    });
   });
-  box.appendChild(modeSeg);
-  box.appendChild(h(`<p class="settings-note">${tr('Chaque theme a son propre style (couleurs, formes). Le mode clair/sombre sapplique au theme choisi.')}</p>`));
+  box.appendChild(themeRow);
+  box.appendChild(h(`<p class="settings-note">${tr('Le theme est synchronise avec ton compte cloud si tu es connecte.')}</p>`));
 
   // ---- Langue du contenu ----
   box.appendChild(h(`<h2 class="settings-title">${tr('Langue')}</h2>`));
@@ -1745,7 +1771,14 @@ export function renderSettings() {
   const modeLabel = cfg?.mode === 'key' ? tr('Cle personnelle') : tr('Proxy');
   box.appendChild(h(`<p class="settings-note">${tr('Mode actuel :')} ${modeLabel}</p>`));
   const reconf = h(`<button class="set-row">${I.globe}<span>${tr("Reconfigurer l'acces")}</span><span class="chev">${I.chevRight}</span></button>`);
-  reconf.addEventListener('click', () => {
+  reconf.addEventListener('click', async () => {
+    const ok = await openConfirmSheet({
+      title: tr("Reconfigurer l'acces TMDB"),
+      message: tr('Tu devras ressaisir ta cle ou ton proxy. L\'app redemarrera sur l\'ecran de configuration.'),
+      confirmLabel: tr('Reconfigurer'),
+      danger: true,
+    });
+    if (!ok) return;
     resetConfig();
     location.reload();
   });
@@ -1765,7 +1798,13 @@ export function renderSettings() {
     });
     const offBtn = h(`<button class="set-row">${I.globe}<span>${tr('Se deconnecter du cloud')}</span><span class="chev">${I.chevRight}</span></button>`);
     offBtn.addEventListener('click', async () => {
-      if (!confirm(tr('La deconnexion supprimera toutes les donnees de cet appareil. Continuer ?'))) return;
+      const ok = await openConfirmSheet({
+        title: tr('Se deconnecter du cloud'),
+        message: tr('La deconnexion supprimera toutes les donnees de cet appareil. Tes donnees restent sur le cloud et pourront etre recuperees en te reconnectant.'),
+        confirmLabel: tr('Se deconnecter'),
+        danger: true,
+      });
+      if (!ok) return;
       await disconnect();
       toast(tr('Deconnecte'));
       location.hash = '#/home';

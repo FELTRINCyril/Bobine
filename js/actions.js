@@ -1,4 +1,4 @@
-// Actions sur les items (favori, watchlist, vus, playlists)
+// Actions sur les items (favori, bibliotheque, vus, playlists)
 import {
   ensureItem, saveItem, getItem, state,
   createPlaylist, savePlaylist,
@@ -9,26 +9,51 @@ import { tr } from './i18n.js';
 
 // meta = { type, tmdbId, title, poster, backdrop, year, isAnime }
 
+// "watchlist" = titre ajoute a la bibliotheque (suivi actif).
+export function isInLibrary(it) {
+  return !!it?.watchlist;
+}
+
+export async function ensureInLibrary(meta) {
+  const it = ensureItem(meta);
+  if (!it.watchlist) {
+    it.watchlist = true;
+    await saveItem(it);
+  }
+  return it;
+}
+
+export async function toggleAdd(meta) {
+  const it = ensureItem(meta);
+  if (it.watchlist) {
+    it.watchlist = false;
+    await saveItem(it);
+    toast(tr('Retire de ma liste'));
+    return false;
+  }
+  it.watchlist = true;
+  await saveItem(it);
+  toast(tr('Ajoute a ma liste'));
+  return true;
+}
+
+/** @deprecated utilise toggleAdd */
+export const toggleWatchlist = toggleAdd;
+
 export async function toggleFavorite(meta) {
   const it = ensureItem(meta);
   it.favorite = !it.favorite;
-  await saveItem(it);
+  if (it.favorite) await ensureInLibrary(meta);
+  else await saveItem(it);
   toast(it.favorite ? tr('Ajoute aux favoris') : tr('Retire des favoris'));
   return it.favorite;
-}
-
-export async function toggleWatchlist(meta) {
-  const it = ensureItem(meta);
-  it.watchlist = !it.watchlist;
-  await saveItem(it);
-  toast(it.watchlist ? tr('Ajoute a la watchlist') : tr('Retire de la watchlist'));
-  return it.watchlist;
 }
 
 export async function setMoviePlays(meta, plays) {
   const it = ensureItem(meta);
   if (!it.runtime && meta.runtime) it.runtime = meta.runtime;
   it.plays = Math.max(0, plays);
+  if (it.plays > 0) it.watchlist = true;
   await saveItem(it);
   return it.plays;
 }
@@ -37,8 +62,10 @@ export async function setEpisodePlays(meta, season, episode, plays) {
   const it = ensureItem(meta);
   if (!it.episodeRuntime) it.episodeRuntime = meta.episodeRuntime || 50;
   const key = `${season}:${episode}`;
-  if (plays > 0) it.episodes[key] = plays;
-  else delete it.episodes[key];
+  if (plays > 0) {
+    it.episodes[key] = plays;
+    it.watchlist = true;
+  } else delete it.episodes[key];
   await saveItem(it);
   return it.episodes[key] || 0;
 }
@@ -46,13 +73,15 @@ export async function setEpisodePlays(meta, season, episode, plays) {
 export async function markSeason(meta, season, episodeNumbers, mode) {
   const it = ensureItem(meta);
   if (!it.episodeRuntime) it.episodeRuntime = meta.episodeRuntime || 50;
+  let touched = false;
   for (const ep of episodeNumbers) {
     const key = `${season}:${ep}`;
     const cur = it.episodes[key] || 0;
-    if (mode === 'all' && cur === 0) it.episodes[key] = 1;
+    if (mode === 'all' && cur === 0) { it.episodes[key] = 1; touched = true; }
     if (mode === 'none') delete it.episodes[key];
-    if (mode === 'rewatch') it.episodes[key] = cur + 1;
+    if (mode === 'rewatch') { it.episodes[key] = cur + 1; touched = true; }
   }
+  if (touched || mode === 'all') it.watchlist = true;
   await saveItem(it);
 }
 
@@ -136,8 +165,7 @@ export function openPlaylistSheet(meta, onChange) {
           pl.items = pl.items.filter((x) => x.id !== id);
           toast(`${tr('Retire de')} "${pl.name}"`);
         } else {
-          ensureItem(meta);
-          await saveItem(getItem(meta.type, meta.tmdbId));
+          await ensureInLibrary(meta);
           pl.items.push({
             id, type: meta.type, tmdbId: meta.tmdbId,
             title: meta.title, poster: meta.poster, year: meta.year || '',
@@ -164,10 +192,8 @@ export function openPlaylistSheet(meta, onChange) {
       const name = input.value.trim();
       if (!name) return;
       const pl = createPlaylist(name);
-      // le titre depuis lequel on cree la playlist y est ajoute directement
       const id = `${meta.type}_${meta.tmdbId}`;
-      ensureItem(meta);
-      await saveItem(getItem(meta.type, meta.tmdbId));
+      await ensureInLibrary(meta);
       pl.items.push({
         id, type: meta.type, tmdbId: meta.tmdbId,
         title: meta.title, poster: meta.poster, year: meta.year || '',

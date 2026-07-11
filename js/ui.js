@@ -111,11 +111,11 @@ export function posterCard(media, opts = {}) {
   const backdropPath = media.backdrop_path !== undefined ? media.backdrop_path : media.backdrop;
   const year = mediaYear(media) || media.year || '';
 
-  const inWl = !!it?.watchlist;
+  const inLib = !!it?.watchlist;
   const quickBtn = opts.noQuick ? '' : `
-    <button class="card-quick ${inWl ? 'on' : ''}" type="button"
-            aria-label="${inWl ? tr('Retirer de la watchlist') : tr('Ajouter a la watchlist')}">
-      ${inWl ? I.bookmarkFill : I.plus}
+    <button class="card-quick ${inLib ? 'on' : ''}" type="button"
+            aria-label="${inLib ? tr('Retirer de ma liste') : tr('Ajouter a ma liste')}">
+      ${inLib ? I.check : I.plus}
     </button>`;
 
   // data-q* : meta pour le bouton watchlist rapide et le rafraichissement

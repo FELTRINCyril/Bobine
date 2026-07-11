@@ -591,6 +591,39 @@ input, textarea {
   grid-template-columns: repeat(3, 1fr);
 }
 
+.detail-tabs {
+  display: flex;
+  gap: 6px;
+  padding: 14px var(--page-pad) 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.detail-tabs::-webkit-scrollbar { display: none; }
+
+.detail-tab {
+  flex: 1;
+  min-width: 0;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 700;
+  text-align: center;
+  white-space: nowrap;
+  border: 1px solid transparent;
+}
+.detail-tab.on {
+  background: var(--accent-soft);
+  color: var(--accent);
+  border-color: var(--accent);
+}
+.detail-tab:active { transform: scale(0.97); }
+
+.detail-panels { padding-bottom: 8px; }
+.detail-panel[hidden] { display: none !important; }
+.detail-panel .section:first-child { margin-top: 16px; }
+
 .act {
   display: flex;
   flex-direction: column;
@@ -1296,7 +1329,14 @@ a.stat:active { background: var(--surface-2); transform: scale(0.98); }
 }
 .cloud-connect-actions .btn { flex: 1; }
 .cloud-connect-go { background: var(--accent); color: #fff; }
-.cloud-connect-go:disabled { opacity: 0.6; pointer-events: none; }
+.confirm-sheet h3 { margin: 0 0 10px; font-size: 17px; }
+.confirm-msg {
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--text-muted);
+  margin: 0 0 14px;
+}
+.confirm-check { margin-bottom: 16px; }
 
 .credit {
   padding: 22px 18px;
@@ -1567,22 +1607,13 @@ a.stat:active { background: var(--surface-2); transform: scale(0.98); }
   top: calc(var(--safe-top) + 12px);
   right: 14px;
   z-index: 45;
-  width: 42px;
-  height: 42px;
-  border-radius: 50%;
-  background: var(--surface-2);
-  border: 1px solid var(--line);
-  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.35);
-  display: grid;
-  place-items: center;
-  color: var(--text);
   opacity: 0;
   transform: translateY(-8px);
   pointer-events: none;
   transition: opacity 0.18s ease, transform 0.18s ease;
 }
 
-.float-search svg { width: 19px; height: 19px; }
+.float-search svg { width: 18px; height: 18px; }
 
 .float-search.show {
   opacity: 1;

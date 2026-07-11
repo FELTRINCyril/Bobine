@@ -2,7 +2,7 @@
 import { loadState } from './db.js';
 import { h, I, posterCard, toast } from './ui.js';
 import { tr } from './i18n.js';
-import { toggleWatchlist } from './actions.js';
+import { toggleAdd } from './actions.js';
 import {
   renderHome, renderCatalog, renderDetail, renderWatchlist,
   renderPlaylists, renderPlaylist, renderProfile, renderSearch,
@@ -105,7 +105,8 @@ function route() {
     scrollPos.set(currentHash, window.scrollY);
     const prevPath = currentHash.split('/')[1];
     if (CACHEABLE.has(prevPath) && view.firstElementChild) {
-      pageCache.set(currentHash, { el: view.firstElementChild, y: window.scrollY });
+      const y = prevPath === 'detail' ? 0 : window.scrollY;
+      pageCache.set(currentHash, { el: view.firstElementChild, y });
       while (pageCache.size > 8) pageCache.delete(pageCache.keys().next().value);
     }
   }
@@ -127,7 +128,7 @@ function route() {
     cached.el.classList.add('no-anim');
     view.replaceChildren(cached.el);
     refreshCards(cached.el);
-    requestAnimationFrame(() => window.scrollTo(0, cached.y));
+    requestAnimationFrame(() => window.scrollTo(0, path === 'detail' ? 0 : cached.y));
     return;
   }
 
@@ -182,7 +183,7 @@ function bindQuickActions() {
       year: ds.qyear || '',
       isAnime: ds.qanime === '1',
     };
-    await toggleWatchlist(meta);
+    await toggleAdd(meta);
     // redessine la carte (etat du bouton + badges)
     card.replaceWith(posterCard(
       { id: meta.tmdbId, title: meta.title, poster_path: meta.poster, backdrop_path: meta.backdrop, year: meta.year, isAnime: meta.isAnime },
@@ -218,7 +219,7 @@ function bindEdgeSwipeBack() {
 // et bouton "retour en haut" en bas a droite.
 function bindScrollUi() {
   const toTop = h(`<button class="scrolltop" aria-label="${tr('Remonter en haut')}">${I.arrowUp}</button>`);
-  const floatSearch = h(`<a class="float-search" href="#/search" aria-label="${tr('Rechercher')}">${I.search}</a>`);
+  const floatSearch = h(`<a class="head-btn float-search" href="#/search" aria-label="${tr('Rechercher')}">${I.search}</a>`);
   document.body.append(toTop, floatSearch);
   toTop.addEventListener('click', () => window.scrollTo({ top: 0, behavior: 'smooth' }));
 
