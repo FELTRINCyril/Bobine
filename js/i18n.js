@@ -320,6 +320,8 @@ const EN = {
   'sur': 'of',
   'Remonter en haut': 'Back to top',
   'Changer de vue': 'Switch view',
+  'Grouper par statut': 'Group by status',
+  'Afficher tout': 'Show all',
   'Options': 'Options',
   'Bobine se regarde en portrait.': 'Bobine is meant for portrait mode.',
   'Remets ton telephone dans le bon sens !': 'Turn your phone back upright!',

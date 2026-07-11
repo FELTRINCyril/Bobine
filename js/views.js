@@ -151,7 +151,9 @@ function mediaFromItem(it) {
 /* ---- Vue galerie / liste + filtre statut (watchlist, playlists, bibliotheque) ---- */
 
 const VIEWMODE_KEY = 'bobine_viewmode';
+const SECTIONS_KEY = 'bobine_sections';
 const getViewMode = () => localStorage.getItem(VIEWMODE_KEY) || 'grid';
+const getSectionsMode = () => localStorage.getItem(SECTIONS_KEY) !== 'flat';
 
 function viewToggle(onChange) {
   const btn = h('<button class="head-btn" aria-label="Changer de vue"></button>');
@@ -159,6 +161,22 @@ function viewToggle(onChange) {
   sync();
   btn.addEventListener('click', () => {
     localStorage.setItem(VIEWMODE_KEY, getViewMode() === 'grid' ? 'list' : 'grid');
+    sync();
+    onChange();
+  });
+  return btn;
+}
+
+function sectionsToggle(onChange) {
+  const btn = h('<button class="head-btn" aria-label="Grouper par statut"></button>');
+  const sync = () => {
+    const grouped = getSectionsMode();
+    btn.innerHTML = grouped ? I.flat : I.sections;
+    btn.setAttribute('aria-label', grouped ? tr('Afficher tout') : tr('Grouper par statut'));
+  };
+  sync();
+  btn.addEventListener('click', () => {
+    localStorage.setItem(SECTIONS_KEY, getSectionsMode() ? 'flat' : 'sections');
     sync();
     onChange();
   });
@@ -184,6 +202,11 @@ const STATUS_ORDER = [
 ];
 
 function renderByStatus(holder, entries, statusOf, renderGroup) {
+  if (!getSectionsMode()) {
+    if (!entries.length) return false;
+    holder.appendChild(renderGroup(entries));
+    return true;
+  }
   let any = false;
   for (const [key, label] of STATUS_ORDER) {
     const group = entries.filter((e) => statusOf(e) === key);
@@ -1087,7 +1110,9 @@ export function renderWatchlist() {
     }
   }
 
-  page.querySelector('.head-actions').prepend(viewToggle(draw));
+  const actions = page.querySelector('.head-actions');
+  actions.prepend(viewToggle(draw));
+  actions.prepend(sectionsToggle(draw));
   page.append(typeChips, holder);
 
   typeChips.querySelectorAll('.chip').forEach((c) =>
@@ -1205,6 +1230,7 @@ export function renderPlaylist(id) {
   page.appendChild(head);
   bindBack(page);
   head.querySelector('.head-actions').prepend(viewToggle(() => draw()));
+  head.querySelector('.head-actions').prepend(sectionsToggle(() => draw()));
 
   head.querySelector('[data-act="menu"]').addEventListener('click', () => {
     const box = h(`<div><h3>${esc(pl.name)}</h3></div>`);
