@@ -1,5 +1,5 @@
 // Service worker : app dispo hors ligne, cache des images TMDB
-const VERSION = 'bobine-v23';
+const VERSION = 'bobine-v24';
 const SHELL = [
   './',
   './index.html',
@@ -44,6 +44,10 @@ self.addEventListener('activate', (e) => {
   );
 });
 
+self.addEventListener('message', (e) => {
+  if (e.data?.type === 'SKIP_WAITING') self.skipWaiting();
+});
+
 self.addEventListener('fetch', (e) => {
   const url = new URL(e.request.url);
 
@@ -61,13 +65,29 @@ self.addEventListener('fetch', (e) => {
     return;
   }
 
-  // API TMDB : reseau uniquement (donnees fraiches), pas de cache SW
-  if (url.hostname === 'api.themoviedb.org') return;
+  // API TMDB / AniList : reseau uniquement
+  if (url.hostname === 'api.themoviedb.org' || url.hostname === 'graphql.anilist.co') return;
 
-  // App shell : cache d'abord, reseau en secours
   if (e.request.method === 'GET' && url.origin === location.origin) {
-    e.respondWith(
-      caches.match(e.request).then((hit) => hit || fetch(e.request))
-    );
+    const path = url.pathname;
+    const isShell = path.endsWith('/') || path.endsWith('.html') || path.endsWith('.js')
+      || path.endsWith('.css') || path.endsWith('.webmanifest');
+
+    // Coquille app : reseau d'abord pour recevoir les MAJ, cache en secours hors ligne
+    if (isShell) {
+      e.respondWith(
+        fetch(e.request)
+          .then((res) => {
+            if (res.ok) {
+              caches.open(VERSION).then((c) => c.put(e.request, res.clone()));
+            }
+            return res;
+          })
+          .catch(() => caches.match(e.request))
+      );
+      return;
+    }
+
+    e.respondWith(caches.match(e.request).then((hit) => hit || fetch(e.request)));
   }
 });
