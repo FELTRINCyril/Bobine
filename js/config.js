@@ -31,7 +31,7 @@ export function setMetadataMode(mode) {
 }
 
 export function canUseFusion() {
-  return getConfig()?.mode === 'proxy';
+  return isConfigured();
 }
 
 // Retourne la config active, ou null si l'app n'est pas encore configuree.

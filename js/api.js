@@ -1,6 +1,7 @@
 // Client TMDB - lecture seule. L'acces (cle perso ou proxy) est resolu au
 // runtime via config.js : aucun secret n'est ecrit dans ce fichier.
-import { getConfig, isV4Token, getMetadataMode, canUseFusion } from './config.js';
+import { getConfig, isV4Token, getMetadataMode, isConfigured } from './config.js';
+import { enrichTmdbDetail, mergeSearchWithAnilist, clearAnilistCache } from './anilist.js';
 
 const BASE = 'https://api.themoviedb.org/3';
 const IMG = 'https://image.tmdb.org/t/p/';
@@ -16,10 +17,12 @@ export const getLang = () => localStorage.getItem(LANG_KEY) || 'fr-FR';
 export function setLang(lang) {
   localStorage.setItem(LANG_KEY, lang);
   cache.clear();
+  clearAnilistCache();
 }
 
 export function clearApiCache() {
   cache.clear();
+  clearAnilistCache();
 }
 
 async function get(path, params = {}) {
@@ -47,51 +50,9 @@ async function get(path, params = {}) {
   return data;
 }
 
-async function fusionGet(path, params = {}) {
-  const cfg = getConfig();
-  if (cfg?.mode !== 'proxy') throw new Error('Fusion requiert le proxy');
-  const url = new URL(cfg.base + path);
-  url.searchParams.set('language', getLang());
-  for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
-  const cacheKey = `fusion:${url}`;
-  if (cache.has(cacheKey)) return cache.get(cacheKey);
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`Fusion ${res.status} sur ${path}`);
-  const data = await res.json();
-  cache.set(cacheKey, data);
-  if (cache.size > CACHE_MAX) cache.delete(cache.keys().next().value);
-  return data;
-}
-
-function normalizeFusionDetail(data) {
-  const tmdb = { ...(data.tmdb || {}) };
-  const merged = data.merged || {};
-  if (!tmdb.overview && merged.overview?.value) tmdb.overview = merged.overview.value;
-  return {
-    ...tmdb,
-    _fusion: {
-      merged,
-      anilist: data.anilist,
-      ids: data.ids,
-    },
-  };
-}
-
-function normalizeFusionSearch(data) {
-  const results = [...(data.results || [])];
-  for (const m of data.anilist_only || []) {
-    results.push({ ...m, _anilistOnly: true });
-  }
-  return {
-    page: data.page,
-    total_pages: data.total_pages,
-    results,
-  };
-}
-
 export const img = (path, size = 'w342') => (path ? `${IMG}${size}${path}` : null);
 
-export { getMetadataMode, canUseFusion };
+export { getMetadataMode, isConfigured as canUseFusion };
 
 export const api = {
   trending: (type, page = 1) => get(`/trending/${type}/week`, { page }),
@@ -151,15 +112,13 @@ export const api = {
     }),
 
   detail: async (type, id, opts = {}) => {
-    if (getMetadataMode() === 'fusion' && canUseFusion()) {
-      const data = await fusionGet(`/bobine/fusion/detail/${type}/${id}`, {
-        is_anime: opts.isAnime ? '1' : '0',
-      });
-      return normalizeFusionDetail(data);
-    }
-    return get(`/${type}/${id}`, {
+    const tmdb = await get(`/${type}/${id}`, {
       append_to_response: 'credits,recommendations,keywords,translations,watch/providers',
     });
+    if (getMetadataMode() !== 'fusion') return tmdb;
+    const anime = opts.isAnime || isAnime(tmdb);
+    if (!anime) return tmdb;
+    return enrichTmdbDetail(tmdb, type);
   },
 
   person: (id) => get(`/person/${id}`, { append_to_response: 'combined_credits' }),
@@ -192,11 +151,9 @@ export const api = {
   season: (tvId, num) => get(`/tv/${tvId}/season/${num}`),
 
   search: async (query, page = 1) => {
-    if (getMetadataMode() === 'fusion' && canUseFusion()) {
-      const data = await fusionGet('/bobine/fusion/search', { q: query, page });
-      return normalizeFusionSearch(data);
-    }
-    return get('/search/multi', { query, page, include_adult: 'false' });
+    const data = await get('/search/multi', { query, page, include_adult: 'false' });
+    if (getMetadataMode() !== 'fusion') return data;
+    return mergeSearchWithAnilist(data, query);
   },
 };
 

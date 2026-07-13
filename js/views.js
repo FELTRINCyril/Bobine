@@ -9,7 +9,7 @@ import {
   exportJson, importJson, ensureItem, isBackupHealthy, touch,
 } from './db.js';
 import { findUniverse } from './universes.js';
-import { getConfig, resetConfig, getMetadataMode, setMetadataMode, canUseFusion } from './config.js';
+import { getConfig, resetConfig, getMetadataMode, setMetadataMode } from './config.js';
 import { SKINS, getSkin, getMode, getSkinInfo, openThemePicker } from './themes.js';
 import { openConfirmSheet } from './confirm.js';
 import { bindInfiniteScroll } from './scrollLoad.js';
@@ -1866,9 +1866,8 @@ export function renderSettings() {
 
   // ---- Metadonnees (fusion TMDB + AniList) ----
   box.appendChild(h(`<h2 class="settings-title">${tr('Metadonnees')}</h2>`));
-  const fusionOk = canUseFusion();
   const metaSeg = h(`
-    <div class="seg${fusionOk ? '' : ' seg--disabled'}">
+    <div class="seg">
       <button class="seg-btn" data-m="tmdb-only">${tr('TMDB seul')}</button>
       <button class="seg-btn" data-m="fusion">${tr('Fusion TMDB + AniList')}</button>
     </div>
@@ -1877,23 +1876,19 @@ export function renderSettings() {
     const mode = getMetadataMode();
     metaSeg.querySelectorAll('.seg-btn').forEach((b) => {
       b.classList.toggle('on', b.dataset.m === mode);
-      b.disabled = !fusionOk && b.dataset.m === 'fusion';
     });
   };
   syncMeta();
   metaSeg.addEventListener('click', (e) => {
     const b = e.target.closest('.seg-btn');
-    if (!b || b.disabled || b.dataset.m === getMetadataMode()) return;
-    if (b.dataset.m === 'fusion' && !fusionOk) return;
+    if (!b || b.dataset.m === getMetadataMode()) return;
     setMetadataMode(b.dataset.m);
     clearApiCache();
     syncMeta();
     toast(b.dataset.m === 'fusion' ? tr('Fusion activee') : tr('Mode TMDB seul'));
   });
   box.appendChild(metaSeg);
-  box.appendChild(h(`<p class="settings-note">${fusionOk
-    ? tr('La fusion enrichit les fiches anime (studios, equipe, score). Aucune cle supplementaire.')
-    : tr('Passe en mode proxy pour activer la fusion.')}</p>`));
+  box.appendChild(h(`<p class="settings-note">${tr('La fusion enrichit les fiches anime via AniList. Fonctionne avec cle TMDB ou proxy, sans cle AniList.')}</p>`));
 
   // ---- Acces TMDB ----
   box.appendChild(h(`<h2 class="settings-title">${tr('Acces TMDB')}</h2>`));
