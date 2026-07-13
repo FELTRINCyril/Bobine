@@ -6,6 +6,7 @@
 const K_MODE = 'bobine_tmdb_mode';   // 'proxy' | 'key'
 const K_PROXY = 'bobine_tmdb_proxy'; // base URL du Worker (sans slash final)
 const K_KEY = 'bobine_tmdb_key';     // cle TMDB v3 perso
+const K_METADATA_MODE = 'bobine_metadata_mode'; // 'tmdb-only' | 'fusion'
 
 // Proxy public par defaut (mode simple, zero config cote utilisateur). Laisser
 // vide tant que le Worker n'est pas deploye ; une fois deploye, coller ici son
@@ -19,6 +20,19 @@ const clean = (s) => (s || '').trim().replace(/\/+$/, '');
 // ?api_key=, et un jeton v4 (long, JWT avec des points) utilise en Bearer. On
 // accepte les deux et on choisit l'auth selon la forme.
 export const isV4Token = (s) => /\./.test((s || '').trim());
+
+export function getMetadataMode() {
+  return localStorage.getItem(K_METADATA_MODE) || 'tmdb-only';
+}
+
+export function setMetadataMode(mode) {
+  if (mode !== 'tmdb-only' && mode !== 'fusion') throw new Error('mode invalide');
+  localStorage.setItem(K_METADATA_MODE, mode);
+}
+
+export function canUseFusion() {
+  return getConfig()?.mode === 'proxy';
+}
 
 // Retourne la config active, ou null si l'app n'est pas encore configuree.
 export function getConfig() {

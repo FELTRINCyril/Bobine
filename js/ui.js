@@ -150,6 +150,42 @@ export function castCard(p) {
   `);
 }
 
+// Carte equipe technique (crew TMDB ou staff AniList)
+export function crewCard(p) {
+  const photo = p.profile_path ? img(p.profile_path, 'w185') : (p.image || null);
+  const sub = p.job || p.role || p.character || '';
+  const inner = photo
+    ? `<img src="${photo}" alt="" loading="lazy">`
+    : `<span class="no-img">${esc((p.name || '?').split(' ').map((w) => w[0]).slice(0, 2).join(''))}</span>`;
+  const tag = p.id ? 'a' : 'div';
+  const href = p.id ? ` href="#/person/${p.id}"` : '';
+  return h(`
+    <${tag} class="cast-card"${href}>
+      <div class="cast-photo">${inner}</div>
+      <div class="card-title" style="text-align:center">${esc(p.name || '')}</div>
+      ${sub ? `<div class="card-sub" style="text-align:center">${esc(sub)}</div>` : ''}
+    </${tag}>
+  `);
+}
+
+// Resultat recherche AniList sans fiche TMDB (affichage seul)
+export function anilistOnlyCard(m) {
+  const imgHtml = m.poster
+    ? `<img src="${esc(m.poster)}" alt="" loading="lazy">`
+    : `<span class="no-img">${esc(m.title || '')}</span>`;
+  const sub = [tr('AniList'), m.year].filter(Boolean).join(' - ');
+  return h(`
+    <div class="card card--readonly" aria-label="${esc(m.title || '')}">
+      <div class="poster">
+        <span class="badge badge-src">${tr('AniList')}</span>
+        ${imgHtml}
+      </div>
+      <div class="card-title">${esc(m.title || '')}</div>
+      <div class="card-sub">${esc(sub)}</div>
+    </div>
+  `);
+}
+
 // Heuristique anime sans dependre d'api.js (evite un import circulaire)
 function isAnimeLike(media) {
   if (media.isAnime !== undefined) return !!media.isAnime;

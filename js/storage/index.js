@@ -13,6 +13,7 @@ const K_TOKEN = 'bobine_sync_token';       // JSON du jeton du fournisseur actif
 const K_TMDB_MODE = 'bobine_tmdb_mode';
 const K_TMDB_KEY = 'bobine_tmdb_key';
 const K_TMDB_PROXY = 'bobine_tmdb_proxy';
+const K_METADATA_MODE = 'bobine_metadata_mode';
 const K_LANG = 'bobine_lang';
 const K_THEME = 'bobine_theme';
 const K_SKIN = 'bobine_skin';
@@ -51,6 +52,7 @@ export function buildSnapshot() {
       skin: localStorage.getItem(K_SKIN) || 'cinema',
       mode: localStorage.getItem(K_MODE) || localStorage.getItem(K_THEME) || 'dark',
       theme: localStorage.getItem(K_MODE) || localStorage.getItem(K_THEME) || '',
+      metadataMode: localStorage.getItem(K_METADATA_MODE) || 'tmdb-only',
     },
     items: [...state.items.values()],
     playlists: [...state.playlists.values()],
@@ -78,6 +80,7 @@ export async function applySnapshot(doc) {
   // Preferences
   const p = doc.prefs || {};
   if (p.lang) localStorage.setItem(K_LANG, p.lang);
+  if (p.metadataMode) localStorage.setItem(K_METADATA_MODE, p.metadataMode);
   if (p.skin) localStorage.setItem(K_SKIN, p.skin);
   if (p.mode) {
     localStorage.setItem(K_MODE, p.mode);

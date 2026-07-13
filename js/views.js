@@ -1,5 +1,5 @@
 // Vues / pages de l'app
-import { api, img, isAnime, getLang, setLang } from './api.js';
+import { api, img, isAnime, getLang, setLang, clearApiCache } from './api.js';
 import { tr, isEn } from './i18n.js';
 import { APP_VERSION } from './version.js';
 import {
@@ -9,7 +9,7 @@ import {
   exportJson, importJson, ensureItem, isBackupHealthy, touch,
 } from './db.js';
 import { findUniverse } from './universes.js';
-import { getConfig, resetConfig } from './config.js';
+import { getConfig, resetConfig, getMetadataMode, setMetadataMode, canUseFusion } from './config.js';
 import { SKINS, getSkin, getMode, getSkinInfo, openThemePicker } from './themes.js';
 import { openConfirmSheet } from './confirm.js';
 import { bindInfiniteScroll } from './scrollLoad.js';
@@ -17,7 +17,7 @@ import { disconnect, syncNow, syncStatus, resetAllData } from './sync.js';
 import { hasSync } from './storage/index.js';
 import { promptCloudConnect, downloadExport } from './cloudConnect.js';
 import {
-  h, esc, I, posterCard, castCard, openSheet, toast, emptyState, spinner,
+  h, esc, I, posterCard, castCard, crewCard, anilistOnlyCard, openSheet, toast, emptyState, spinner,
   mediaTitle, mediaYear, mediaType, typeLabel, isReleased,
 } from './ui.js';
 import {
@@ -27,6 +27,20 @@ import {
 } from './actions.js';
 
 const $view = () => document.getElementById('view');
+
+const CREW_DEPARTMENTS = [
+  { key: 'Directing', label: 'Realisation', jobs: ['Director', 'Co-Director'] },
+  { key: 'Writing', label: 'Scenario', jobs: ['Writer', 'Screenplay', 'Story', 'Novel', 'Characters'] },
+  { key: 'Production', label: 'Production', jobs: ['Producer', 'Executive Producer', 'Co-Producer'] },
+  { key: 'Sound', label: 'Musique', jobs: ['Original Music Composer', 'Music', 'Composer'] },
+];
+
+function pickCrew(crew, department, jobs) {
+  const seen = new Set();
+  return (crew || [])
+    .filter((c) => c.department === department && jobs.includes(c.job))
+    .filter((c) => !seen.has(c.id) && seen.add(c.id));
+}
 
 function metaFrom(media, type) {
   return {
@@ -499,7 +513,8 @@ export async function renderDetail(type, id) {
 
   let d;
   try {
-    d = await api.detail(type, id);
+    const pre = getItem(type, id);
+    d = await api.detail(type, id, { isAnime: pre?.isAnime });
   } catch {
     page.innerHTML = '';
     page.appendChild(pageHead(tr('Oups'), { back: true }));
@@ -545,6 +560,7 @@ export async function renderDetail(type, id) {
     ? (d.runtime ? `${Math.floor(d.runtime / 60)}h${String(d.runtime % 60).padStart(2, '0')}` : '')
     : `${d.number_of_seasons} ${d.number_of_seasons > 1 ? tr('saisons') : tr('saison')} - ${d.number_of_episodes} ep.`;
   const note = d.vote_average ? d.vote_average.toFixed(1) : null;
+  const anilistScore = d._fusion?.merged?.scoreAnilist?.value;
   const poster = img(d.poster_path, 'w342');
 
   // "VF" = fiche traduite en francais chez TMDB (titre/synopsis).
@@ -560,6 +576,7 @@ export async function renderDetail(type, id) {
         <h1>${esc(meta.title)}</h1>
         <div class="detail-meta">
           ${note ? `<span class="note">&#9733; ${note}</span>` : ''}
+          ${anilistScore ? `<span class="note note-anilist" title="${tr('Score AniList')}">AL ${(anilistScore / 10).toFixed(1)}</span>` : ''}
           ${year ? `<span>${year}</span>` : ''}
           ${runtime ? `<span>${runtime}</span>` : ''}
           <span>${typeLabel(type, meta.isAnime)}</span>
@@ -737,6 +754,22 @@ export async function renderDetail(type, id) {
     panelOverview.appendChild(s);
   }
 
+  const fusion = d._fusion?.merged;
+  if (fusion?.studios?.value?.length) {
+    const studios = h(`<p class="fusion-line">${esc(fusion.studios.value.join(', '))} <span class="src-chip">${tr('AniList')}</span></p>`);
+    panelOverview.appendChild(section(tr('Studios'), studios));
+  }
+
+  if (fusion?.staff?.value?.length) {
+    const row = h('<div class="hscroll"><div class="hscroll-inner"></div></div>');
+    const inner = row.firstElementChild;
+    for (const p of fusion.staff.value.slice(0, 12)) inner.appendChild(crewCard(p));
+    const head = h(`<div class="section-head-row"><span class="src-chip">${tr('AniList')}</span></div>`);
+    const sec = section(tr('Equipe'), row);
+    sec.querySelector('.section-pad').prepend(head);
+    panelOverview.appendChild(sec);
+  }
+
   const fr = d['watch/providers']?.results?.FR;
   if (fr) {
     const dedup = (arr) => {
@@ -766,6 +799,25 @@ export async function renderDetail(type, id) {
       }
       box.appendChild(h(`<p class="prov-credit">${tr('Source : JustWatch via TMDB (France)')}</p>`));
       panelOverview.appendChild(section(tr('Ou regarder'), box));
+    }
+  }
+
+  const alLinks = fusion?.streamingLinks?.value;
+  if (alLinks?.length) {
+    const box = h('<div class="providers al-links"></div>');
+    for (const l of alLinks.slice(0, 8)) {
+      if (!l.url) continue;
+      box.appendChild(h(`
+        <a class="prov al-link" href="${esc(l.url)}" target="_blank" rel="noopener noreferrer">
+          <span>${esc(l.site || l.url)}</span>
+        </a>
+      `));
+    }
+    if (box.children.length) {
+      const head = h(`<div class="section-head-row"><span class="src-chip">${tr('AniList')}</span></div>`);
+      const sec = section(tr('Streaming AniList'), box);
+      sec.querySelector('.section-pad').prepend(head);
+      panelOverview.appendChild(sec);
     }
   }
 
@@ -805,6 +857,19 @@ export async function renderDetail(type, id) {
       ? stashListing(`cast-${type}-${id}`, `${tr('Casting')} - ${meta.title}`, 'cast', cast)
       : null;
     panelMore.appendChild(section(tr('Casting'), row, link));
+  }
+
+  const crew = d.credits?.crew || [];
+  for (const dep of CREW_DEPARTMENTS) {
+    const people = pickCrew(crew, dep.key, dep.jobs);
+    if (!people.length) continue;
+    const row = h('<div class="hscroll"><div class="hscroll-inner"></div></div>');
+    const inner = row.firstElementChild;
+    for (const p of people.slice(0, 8)) inner.appendChild(crewCard(p));
+    const link = people.length > 8
+      ? stashListing(`crew-${dep.key}-${type}-${id}`, `${tr(dep.label)} - ${meta.title}`, 'crew', people)
+      : null;
+    panelMore.appendChild(section(tr(dep.label), row, link));
   }
 }
 
@@ -1424,6 +1489,10 @@ export function renderSearch() {
     const usable = list.length - (list.length % 3);
     for (const m of list.slice(0, usable)) {
       if (m.media_type === 'person') continue;
+      if (m._anilistOnly) {
+        results.appendChild(anilistOnlyCard(m));
+        continue;
+      }
       const mtype = m.media_type || (m.title ? 'movie' : 'tv');
       results.appendChild(posterCard(m, { type: mtype, sub: [typeLabel(mtype, isAnime(m)), mediaYear(m)].filter(Boolean).join(' - ') }));
     }
@@ -1627,6 +1696,10 @@ export function renderListing(id) {
     for (const p of items) grid.appendChild(castCard(p));
     return;
   }
+  if (type === 'crew') {
+    for (const p of items) grid.appendChild(crewCard(p));
+    return;
+  }
 
   const count = items.length - (items.length % 3 || 0) || items.length;
   for (const m of items.slice(0, count)) {
@@ -1790,6 +1863,37 @@ export function renderSettings() {
   });
   box.appendChild(langSeg);
   box.appendChild(h(`<p class="settings-note">${tr("Langue de l'app et du contenu TMDB (titres, synopsis, listes).")}</p>`));
+
+  // ---- Metadonnees (fusion TMDB + AniList) ----
+  box.appendChild(h(`<h2 class="settings-title">${tr('Metadonnees')}</h2>`));
+  const fusionOk = canUseFusion();
+  const metaSeg = h(`
+    <div class="seg${fusionOk ? '' : ' seg--disabled'}">
+      <button class="seg-btn" data-m="tmdb-only">${tr('TMDB seul')}</button>
+      <button class="seg-btn" data-m="fusion">${tr('Fusion TMDB + AniList')}</button>
+    </div>
+  `);
+  const syncMeta = () => {
+    const mode = getMetadataMode();
+    metaSeg.querySelectorAll('.seg-btn').forEach((b) => {
+      b.classList.toggle('on', b.dataset.m === mode);
+      b.disabled = !fusionOk && b.dataset.m === 'fusion';
+    });
+  };
+  syncMeta();
+  metaSeg.addEventListener('click', (e) => {
+    const b = e.target.closest('.seg-btn');
+    if (!b || b.disabled || b.dataset.m === getMetadataMode()) return;
+    if (b.dataset.m === 'fusion' && !fusionOk) return;
+    setMetadataMode(b.dataset.m);
+    clearApiCache();
+    syncMeta();
+    toast(b.dataset.m === 'fusion' ? tr('Fusion activee') : tr('Mode TMDB seul'));
+  });
+  box.appendChild(metaSeg);
+  box.appendChild(h(`<p class="settings-note">${fusionOk
+    ? tr('La fusion enrichit les fiches anime (studios, equipe, score). Aucune cle supplementaire.')
+    : tr('Passe en mode proxy pour activer la fusion.')}</p>`));
 
   // ---- Acces TMDB ----
   box.appendChild(h(`<h2 class="settings-title">${tr('Acces TMDB')}</h2>`));

@@ -916,6 +916,68 @@ a.genre:active {
   align-self: center;
 }
 
+.note-anilist {
+  color: #8ab4ff;
+  border: 1px solid rgba(138, 180, 255, 0.35);
+  border-radius: 6px;
+  padding: 1px 6px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.src-chip {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  color: #8ab4ff;
+  border: 1px solid rgba(138, 180, 255, 0.35);
+  border-radius: 5px;
+  padding: 1px 5px;
+  vertical-align: middle;
+}
+
+.fusion-line { line-height: 1.55; }
+
+.section-head-row {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 8px;
+}
+
+.badge-src {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  z-index: 2;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  color: #fff;
+  background: rgba(30, 80, 180, 0.88);
+  border-radius: 4px;
+  padding: 2px 5px;
+}
+
+.card--readonly { cursor: default; pointer-events: none; opacity: 0.92; }
+
+.al-links { display: flex; flex-wrap: wrap; gap: 8px; }
+
+.al-link {
+  display: inline-flex;
+  align-items: center;
+  padding: 8px 12px;
+  border-radius: var(--radius);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  text-decoration: none;
+}
+
+.seg--disabled .seg-btn[disabled] { opacity: 0.45; cursor: not-allowed; }
+
 /* ---------- Ou regarder (plateformes) ---------- */
 
 .providers { padding: 0 var(--page-pad); }

@@ -1,9 +1,27 @@
-# Proxy TMDB (Cloudflare Worker)
+# Proxy TMDB + fusion AniList (Cloudflare Worker)
 
 Ce Worker garde la clé TMDB **côté serveur**. Le navigateur ne la voit jamais :
 l'app appelle le Worker, le Worker relaie vers TMDB en ajoutant la clé.
 
+Depuis la v1.16, le même Worker expose aussi des routes **fusion TMDB + AniList**
+pour enrichir les fiches anime (studios, équipe, score). AniList est public :
+**aucun secret supplémentaire** n'est requis.
+
 100% gratuit, **sans carte bancaire** (offre gratuite Cloudflare Workers).
+
+## Routes
+
+| Route | Rôle |
+|-------|------|
+| `GET /movie/*`, `GET /tv/*`, etc. | Proxy TMDB **inchangé** (rétrocompatibilité) |
+| `GET /bobine/fusion/detail/:type/:id` | Fiche fusionnée (`type` = `movie` ou `tv`) |
+| `GET /bobine/fusion/search?q=...&page=1` | Recherche TMDB + compléments AniList |
+
+Paramètres utiles :
+- `language` — langue TMDB (ex. `fr-FR`)
+- `is_anime` — `1` ou `0` (hint client, le Worker détecte aussi automatiquement)
+
+Cache Cloudflare : 1 h (fiches), 15 min (recherche).
 
 ## Déploiement (via le dashboard, le plus simple)
 
@@ -19,6 +37,9 @@ l'app appelle le Worker, le Worker relaie vers TMDB en ajoutant la clé.
 Ton Worker est alors joignable à une URL du type :
 `https://bobine-tmdb.<ton-compte>.workers.dev`
 
+**Mise à jour** : si tu avais déjà déployé l'ancien proxy, remplace le code par
+le nouveau `worker.js` et redéploie. L'URL ne change pas.
+
 ## Brancher l'app dessus
 
 Deux options :
@@ -27,6 +48,9 @@ Deux options :
   (fichier `js/config.js`). Au premier lancement, un bouton "Commencer" suffit.
 - **Ponctuel (juste toi)** : au premier lancement, section "Options avancées"
   -> "Utiliser un proxy" -> coller l'URL.
+
+Ensuite, dans **Paramètres → Métadonnées**, l'utilisateur peut activer la
+**Fusion TMDB + AniList** (optionnel, désactivé par défaut).
 
 ## Sécurité / quota
 

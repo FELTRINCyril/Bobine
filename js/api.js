@@ -1,6 +1,6 @@
 // Client TMDB - lecture seule. L'acces (cle perso ou proxy) est resolu au
 // runtime via config.js : aucun secret n'est ecrit dans ce fichier.
-import { getConfig, isV4Token } from './config.js';
+import { getConfig, isV4Token, getMetadataMode, canUseFusion } from './config.js';
 
 const BASE = 'https://api.themoviedb.org/3';
 const IMG = 'https://image.tmdb.org/t/p/';
@@ -15,6 +15,10 @@ const LANG_KEY = 'bobine_lang';
 export const getLang = () => localStorage.getItem(LANG_KEY) || 'fr-FR';
 export function setLang(lang) {
   localStorage.setItem(LANG_KEY, lang);
+  cache.clear();
+}
+
+export function clearApiCache() {
   cache.clear();
 }
 
@@ -43,7 +47,51 @@ async function get(path, params = {}) {
   return data;
 }
 
+async function fusionGet(path, params = {}) {
+  const cfg = getConfig();
+  if (cfg?.mode !== 'proxy') throw new Error('Fusion requiert le proxy');
+  const url = new URL(cfg.base + path);
+  url.searchParams.set('language', getLang());
+  for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
+  const cacheKey = `fusion:${url}`;
+  if (cache.has(cacheKey)) return cache.get(cacheKey);
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Fusion ${res.status} sur ${path}`);
+  const data = await res.json();
+  cache.set(cacheKey, data);
+  if (cache.size > CACHE_MAX) cache.delete(cache.keys().next().value);
+  return data;
+}
+
+function normalizeFusionDetail(data) {
+  const tmdb = { ...(data.tmdb || {}) };
+  const merged = data.merged || {};
+  if (!tmdb.overview && merged.overview?.value) tmdb.overview = merged.overview.value;
+  return {
+    ...tmdb,
+    _fusion: {
+      merged,
+      anilist: data.anilist,
+      ids: data.ids,
+    },
+  };
+}
+
+function normalizeFusionSearch(data) {
+  const results = [...(data.results || [])];
+  for (const m of data.anilist_only || []) {
+    results.push({ ...m, _anilistOnly: true });
+  }
+  return {
+    page: data.page,
+    total_pages: data.total_pages,
+    results,
+  };
+}
+
 export const img = (path, size = 'w342') => (path ? `${IMG}${size}${path}` : null);
+
+export { getMetadataMode, canUseFusion };
 
 export const api = {
   trending: (type, page = 1) => get(`/trending/${type}/week`, { page }),
@@ -102,10 +150,17 @@ export const api = {
       page,
     }),
 
-  detail: (type, id) =>
-    get(`/${type}/${id}`, {
+  detail: async (type, id, opts = {}) => {
+    if (getMetadataMode() === 'fusion' && canUseFusion()) {
+      const data = await fusionGet(`/bobine/fusion/detail/${type}/${id}`, {
+        is_anime: opts.isAnime ? '1' : '0',
+      });
+      return normalizeFusionDetail(data);
+    }
+    return get(`/${type}/${id}`, {
       append_to_response: 'credits,recommendations,keywords,translations,watch/providers',
-    }),
+    });
+  },
 
   person: (id) => get(`/person/${id}`, { append_to_response: 'combined_credits' }),
 
@@ -136,8 +191,13 @@ export const api = {
 
   season: (tvId, num) => get(`/tv/${tvId}/season/${num}`),
 
-  search: (query, page = 1) =>
-    get('/search/multi', { query, page, include_adult: 'false' }),
+  search: async (query, page = 1) => {
+    if (getMetadataMode() === 'fusion' && canUseFusion()) {
+      const data = await fusionGet('/bobine/fusion/search', { q: query, page });
+      return normalizeFusionSearch(data);
+    }
+    return get('/search/multi', { query, page, include_adult: 'false' });
+  },
 };
 
 // Un media TMDB est-il un anime ? (animation + origine JP)
