@@ -130,6 +130,15 @@ export const api = {
   discover: (type, params, page = 1) =>
     get(`/discover/${type}`, { ...params, page }),
 
+  // Decouverte basee sur une personne (acteur ou realisateur)
+  discoverByPerson: (type, personId, page = 1) =>
+    get(`/discover/${type}`, {
+      with_people: personId,
+      sort_by: 'popularity.desc',
+      page,
+      ...(type === 'movie' ? { 'vote_count.gte': 40 } : { 'vote_count.gte': 20 }),
+    }),
+
   collection: (id) => get(`/collection/${id}`),
 
   // Films/series d'un univers via mot-cle TMDB (ex: 180547 = MCU).

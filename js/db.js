@@ -2,7 +2,7 @@
 // Stores : items (films/series suivis), playlists.
 
 const DB_NAME = 'bobine';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 let dbp = null;
 
@@ -14,6 +14,7 @@ function openDb() {
       const d = req.result;
       if (!d.objectStoreNames.contains('items')) d.createObjectStore('items', { keyPath: 'id' });
       if (!d.objectStoreNames.contains('playlists')) d.createObjectStore('playlists', { keyPath: 'id' });
+      if (!d.objectStoreNames.contains('people')) d.createObjectStore('people', { keyPath: 'id' });
     };
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);
@@ -78,6 +79,7 @@ async function idbDelSafe(store, key) {
 export const state = {
   items: new Map(), // id -> item
   playlists: new Map(), // id -> playlist
+  people: new Map(), // tmdbId -> person favori
 };
 
 const BACKUP_KEY = 'bobine_backup_v1';
@@ -104,6 +106,7 @@ export function syncBackup() {
       at: Date.now(),
       items: [...state.items.values()],
       playlists: [...state.playlists.values()],
+      people: [...state.people.values()],
     }));
     flagBackup(true);
   } catch {
@@ -129,17 +132,21 @@ export function setStamp(ts) {
 // Remplace entierement l'etat local par celui d'un snapshot distant (adoption
 // "dernier ecrit gagne"). Utilise par la synchro. Ne declenche pas de push :
 // l'appelant gere la suppression de l'evenement.
-export async function replaceAll(items, playlists) {
+export async function replaceAll(items, playlists, people) {
   state.items.clear();
   state.playlists.clear();
+  state.people.clear();
   for (const it of items || []) state.items.set(it.id, it);
   for (const pl of playlists || []) state.playlists.set(pl.id, pl);
+  for (const p of people || []) state.people.set(p.id, p);
   try {
     await idbClear('items');
     await idbClear('playlists');
+    await idbClear('people');
   } catch (e) { console.warn('[bobine] purge IndexedDB avant adoption echouee', e); }
   for (const it of items || []) await idbPutSafe('items', it);
   for (const pl of playlists || []) await idbPutSafe('playlists', pl);
+  for (const p of people || []) await idbPutSafe('people', p);
   syncBackup();
 }
 
@@ -167,19 +174,32 @@ async function reconcileBackup() {
       restored++;
     }
   }
+  for (const p of bak.people || []) {
+    if (!state.people.has(p.id)) {
+      state.people.set(p.id, p);
+      await idbPutSafe('people', p);
+      restored++;
+    }
+  }
   return restored;
 }
 
 export async function loadState() {
   let items = [];
   let playlists = [];
+  let people = [];
   try {
-    [items, playlists] = await Promise.all([idbAll('items'), idbAll('playlists')]);
+    [items, playlists, people] = await Promise.all([
+      idbAll('items'),
+      idbAll('playlists'),
+      idbAll('people').catch(() => []),
+    ]);
   } catch (e) {
     console.warn('[bobine] IndexedDB indisponible, lecture de la copie locale seule', e);
   }
   for (const it of items) state.items.set(it.id, it);
   for (const pl of playlists) state.playlists.set(pl.id, pl);
+  for (const p of people) state.people.set(p.id, p);
   await reconcileBackup();
   syncBackup();
 }
@@ -377,16 +397,61 @@ export async function deletePlaylist(id) {
   syncBackup();
 }
 
+// ---- Personnes favorites (acteurs / realisateurs) ----
+// person = { id: tmdbId, name, profile, knownFor, addedAt }
+
+export function getFavoritePerson(tmdbId) {
+  return state.people.get(Number(tmdbId)) || null;
+}
+
+export function isFavoritePerson(tmdbId) {
+  return state.people.has(Number(tmdbId));
+}
+
+export async function saveFavoritePerson(person) {
+  const p = {
+    id: Number(person.id),
+    name: person.name || '',
+    profile: person.profile || person.profile_path || null,
+    knownFor: person.knownFor || person.known_for_department || '',
+    addedAt: person.addedAt || Date.now(),
+  };
+  state.people.set(p.id, p);
+  await idbPutSafe('people', p);
+  touch();
+  syncBackup();
+  return p;
+}
+
+export async function removeFavoritePerson(tmdbId) {
+  const id = Number(tmdbId);
+  state.people.delete(id);
+  await idbDelSafe('people', id);
+  touch();
+  syncBackup();
+}
+
+export async function toggleFavoritePerson(person) {
+  const id = Number(person.id);
+  if (state.people.has(id)) {
+    await removeFavoritePerson(id);
+    return false;
+  }
+  await saveFavoritePerson(person);
+  return true;
+}
+
 // ---- Export / import ----
 
 export function exportJson() {
   return JSON.stringify(
     {
       app: 'bobine',
-      version: 1,
+      version: 2,
       exportedAt: new Date().toISOString(),
       items: [...state.items.values()],
       playlists: [...state.playlists.values()],
+      people: [...state.people.values()],
     },
     null,
     2
@@ -406,9 +471,17 @@ export async function importJson(text) {
     state.playlists.set(pl.id, pl);
     await idbPutSafe('playlists', pl);
   }
+  for (const p of data.people || []) {
+    state.people.set(p.id, p);
+    await idbPutSafe('people', p);
+  }
   touch();
   syncBackup();
-  return { items: data.items.length, playlists: (data.playlists || []).length };
+  return {
+    items: data.items.length,
+    playlists: (data.playlists || []).length,
+    people: (data.people || []).length,
+  };
 }
 
 // Efface toutes les donnees de visionnage (memoire, IndexedDB, copie locale).
@@ -416,9 +489,11 @@ export async function importJson(text) {
 export async function clearAllData() {
   state.items.clear();
   state.playlists.clear();
+  state.people.clear();
   try {
     await idbClear('items');
     await idbClear('playlists');
+    await idbClear('people');
   } catch (e) { console.warn('[bobine] purge IndexedDB echouee', e); }
   try {
     localStorage.removeItem(BACKUP_KEY);

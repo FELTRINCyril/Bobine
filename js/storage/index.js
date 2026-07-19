@@ -56,6 +56,7 @@ export function buildSnapshot() {
     },
     items: [...state.items.values()],
     playlists: [...state.playlists.values()],
+    people: [...state.people.values()],
   };
 }
 
@@ -91,7 +92,7 @@ export async function applySnapshot(doc) {
   }
 
   // Donnees
-  await replaceAll(doc.items, doc.playlists);
+  await replaceAll(doc.items, doc.playlists, doc.people);
 
   return { langChanged: !!p.lang && p.lang !== prevLang };
 }

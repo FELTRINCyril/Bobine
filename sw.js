@@ -1,5 +1,5 @@
 // Service worker : app dispo hors ligne, cache des images TMDB
-const VERSION = 'bobine-v24';
+const VERSION = 'bobine-v27';
 const SHELL = [
   './',
   './index.html',
@@ -73,10 +73,11 @@ self.addEventListener('fetch', (e) => {
     const isShell = path.endsWith('/') || path.endsWith('.html') || path.endsWith('.js')
       || path.endsWith('.css') || path.endsWith('.webmanifest');
 
-    // Coquille app : reseau d'abord pour recevoir les MAJ, cache en secours hors ligne
+    // Coquille app : reseau d'abord (sans cache HTTP) pour recevoir les MAJ,
+    // cache SW en secours hors ligne.
     if (isShell) {
       e.respondWith(
-        fetch(e.request)
+        fetch(e.request, { cache: 'no-store' })
           .then((res) => {
             if (res.ok) {
               caches.open(VERSION).then((c) => c.put(e.request, res.clone()));

@@ -7,7 +7,7 @@ import {
   renderHome, renderCatalog, renderDetail, renderWatchlist,
   renderPlaylists, renderPlaylist, renderProfile, renderSearch,
   renderStats, renderLibrary, renderListing, renderBrowse,
-  renderSettings, renderPerson, renderAdvanced, initAppearance,
+  renderSettings, renderPerson, renderPeopleFavorites, renderAdvanced, initAppearance,
 } from './views.js';
 import { isConfigured } from './config.js';
 import { renderOnboarding } from './onboarding.js';
@@ -77,21 +77,58 @@ let skipPageAnim = false; // pose par le swipe retour pour eviter le flash
 // Cache des pages rendues : en revenant en arriere, on restaure le DOM tel
 // quel (donnees "Charger plus" comprises, position de scroll comprise) au
 // lieu de re-rendre -> pas de flash, pas de donnees perdues.
-// Seules les pages "reseau" sont cachees ; les pages locales (watchlist,
-// playlists, profil...) se re-rendent pour rester exactes.
-const pageCache = new Map(); // hash -> { el, y }
-const CACHEABLE = new Set(['home', 'movies', 'series', 'anime', 'detail', 'browse', 'listing', 'search', 'person', 'advanced']);
+// Pages locales (watchlist, playlist...) exclus : elles se re-rendent pour
+// rester a jour, mais sans animation d'entree au retour (voir isBack).
+// "search" est volontairement exclu : la recherche repart toujours a zero.
+const pageCache = new Map(); // hash -> { el, y, hscrolls }
+const CACHEABLE = new Set([
+  'home', 'movies', 'series', 'anime', 'detail', 'browse', 'listing',
+  'person', 'advanced',
+]);
 const navStack = [];
 
-// Redessine les cartes d'une page restauree (badges vu/favori, bouton
-// watchlist) a partir de leurs data-attributes.
+// Met a jour badges / bouton + sans recreer les <img> (evite le flash).
 function refreshCards(root) {
   root.querySelectorAll('a.card[data-qid]').forEach((card) => {
     const ds = card.dataset;
-    card.replaceWith(posterCard(
+    const fresh = posterCard(
       { id: Number(ds.qid), title: ds.qtitle, poster_path: ds.qposter || null, backdrop_path: ds.qbackdrop || null, year: ds.qyear, isAnime: ds.qanime === '1' },
       { type: ds.qtype, sub: ds.qsub || '', noQuick: ds.qnoquick === '1' }
-    ));
+    );
+    const oldPoster = card.querySelector('.poster');
+    const newPoster = fresh.querySelector('.poster');
+    if (!oldPoster || !newPoster) {
+      card.replaceWith(fresh);
+      return;
+    }
+    // Conserve l'image deja chargee
+    const oldImg = oldPoster.querySelector('img');
+    const newImg = newPoster.querySelector('img');
+    if (oldImg && newImg && oldImg.getAttribute('src') === newImg.getAttribute('src')) {
+      newImg.replaceWith(oldImg);
+    }
+    oldPoster.replaceWith(newPoster);
+    // titre / sous-titre
+    const t = card.querySelector('.card-title');
+    const nt = fresh.querySelector('.card-title');
+    if (t && nt) t.textContent = nt.textContent;
+    const s = card.querySelector('.card-sub');
+    const ns = fresh.querySelector('.card-sub');
+    if (s && ns) s.textContent = ns.textContent;
+    else if (!s && ns) card.appendChild(ns);
+    else if (s && !ns) s.remove();
+  });
+}
+
+function snapshotHscrolls(root) {
+  return [...root.querySelectorAll('.hscroll')].map((el) => el.scrollLeft);
+}
+
+function restoreHscrolls(root, lefts) {
+  if (!lefts?.length) return;
+  const rows = root.querySelectorAll('.hscroll');
+  lefts.forEach((left, i) => {
+    if (rows[i]) rows[i].scrollLeft = left;
   });
 }
 
@@ -105,9 +142,12 @@ function route() {
     scrollPos.set(currentHash, window.scrollY);
     const prevPath = currentHash.split('/')[1];
     if (CACHEABLE.has(prevPath) && view.firstElementChild) {
-      const y = prevPath === 'detail' ? 0 : window.scrollY;
-      pageCache.set(currentHash, { el: view.firstElementChild, y });
-      while (pageCache.size > 8) pageCache.delete(pageCache.keys().next().value);
+      pageCache.set(currentHash, {
+        el: view.firstElementChild,
+        y: window.scrollY,
+        hscrolls: snapshotHscrolls(view.firstElementChild),
+      });
+      while (pageCache.size > 10) pageCache.delete(pageCache.keys().next().value);
     }
   }
 
@@ -128,7 +168,10 @@ function route() {
     cached.el.classList.add('no-anim');
     view.replaceChildren(cached.el);
     refreshCards(cached.el);
-    requestAnimationFrame(() => window.scrollTo(0, path === 'detail' ? 0 : cached.y));
+    requestAnimationFrame(() => {
+      window.scrollTo(0, cached.y || 0);
+      restoreHscrolls(cached.el, cached.hscrolls);
+    });
     return;
   }
 
@@ -149,11 +192,13 @@ function route() {
     case 'browse': renderBrowse(a, Number(b), c); break;
     case 'settings': renderSettings(); break;
     case 'person': renderPerson(Number(a)); break;
+    case 'people': renderPeopleFavorites(); break;
     case 'advanced': renderAdvanced(); break;
     default: renderHome();
   }
 
-  if (skipPageAnim) {
+  // Retour arriere : pas d'animation d'entree (evite le flash sur listes locales)
+  if (isBack || skipPageAnim) {
     skipPageAnim = false;
     document.querySelector('#view .page')?.classList.add('no-anim');
   }
@@ -268,7 +313,7 @@ async function boot() {
   }
 
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js').then((reg) => {
+    navigator.serviceWorker.register('sw.js?v=1.20').then((reg) => {
       reg.update().catch(() => {});
       const onReload = () => {
         navigator.serviceWorker.addEventListener('controllerchange', () => location.reload(), { once: true });

@@ -1,1 +1,4 @@
 .DS_Store
+node_modules/
+worker/.wrangler/
+package-lock.json

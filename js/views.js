@@ -7,8 +7,9 @@ import {
   watchedEpisodeCount, totalEpisodePlays, computeStats, formatDuration,
   savePlaylist, deletePlaylist, createPlaylist,
   exportJson, importJson, ensureItem, isBackupHealthy, touch,
+  isFavoritePerson, toggleFavoritePerson,
 } from './db.js';
-import { findUniverse } from './universes.js';
+import { findUniverse, sortByMcuChrono, MCU_CHRONO } from './universes.js';
 import { getConfig, resetConfig, getMetadataMode, setMetadataMode } from './config.js';
 import { SKINS, getSkin, getMode, getSkinInfo, openThemePicker } from './themes.js';
 import { openConfirmSheet } from './confirm.js';
@@ -166,8 +167,108 @@ function mediaFromItem(it) {
 
 const VIEWMODE_KEY = 'bobine_viewmode';
 const SECTIONS_KEY = 'bobine_sections';
+const LISTPREFS_KEY = 'bobine_listprefs_';
 const getViewMode = () => localStorage.getItem(VIEWMODE_KEY) || 'grid';
 const getSectionsMode = () => localStorage.getItem(SECTIONS_KEY) !== 'flat';
+
+function loadListPrefs(key) {
+  try {
+    return JSON.parse(sessionStorage.getItem(LISTPREFS_KEY + key) || 'null') || {};
+  } catch {
+    return {};
+  }
+}
+
+function saveListPrefs(key, prefs) {
+  try {
+    sessionStorage.setItem(LISTPREFS_KEY + key, JSON.stringify(prefs));
+  } catch { /* quota */ }
+}
+
+function looksLikeMcu(items) {
+  if (!items.length) return false;
+  const mcuSet = new Set(MCU_CHRONO);
+  let hits = 0;
+  for (const it of items) {
+    if (mcuSet.has(Number(it.tmdbId || it.id))) hits++;
+  }
+  return hits >= 2 || (hits / items.length) >= 0.25;
+}
+
+function sortListItems(items, sort, { getYear } = {}) {
+  const arr = [...items];
+  if (sort === 'title') {
+    arr.sort((a, b) => (a.title || '').localeCompare(b.title || '', undefined, { sensitivity: 'base' }));
+  } else if (sort === 'year') {
+    arr.sort((a, b) => {
+      const ya = getYear ? getYear(a) : (a.year || '');
+      const yb = getYear ? getYear(b) : (b.year || '');
+      return String(yb).localeCompare(String(ya));
+    });
+  } else if (sort === 'chrono') {
+    return sortByMcuChrono(arr, (x) => x.tmdbId || x.id);
+  } else {
+    // recent (defaut)
+    arr.sort((a, b) => (b.updatedAt || b.addedAt || 0) - (a.updatedAt || a.addedAt || 0));
+  }
+  return arr;
+}
+
+function openListFilterSheet({ prefs, onApply, showChrono = false }) {
+  const box = h(`
+    <div class="list-filter-sheet">
+      <h3>${tr('Filtres et tri')}</h3>
+      <h2 class="settings-title">${tr('Trier par')}</h2>
+      <div class="seg seg-wrap">
+        <button class="seg-btn" data-s="recent">${tr('Recents')}</button>
+        <button class="seg-btn" data-s="title">${tr('Titre')}</button>
+        <button class="seg-btn" data-s="year">${tr('Annee')}</button>
+        ${showChrono ? `<button class="seg-btn" data-s="chrono">${tr('Chronologie MCU')}</button>` : ''}
+      </div>
+      <button class="btn" data-act="apply" style="margin-top:16px">${tr('Appliquer')}</button>
+    </div>
+  `);
+  let sort = prefs.sort || 'recent';
+  const sync = () => box.querySelectorAll('[data-s]').forEach((b) => b.classList.toggle('on', b.dataset.s === sort));
+  sync();
+  box.querySelectorAll('[data-s]').forEach((b) => b.addEventListener('click', () => { sort = b.dataset.s; sync(); }));
+  const close = openSheet(box);
+  box.querySelector('[data-act="apply"]').addEventListener('click', () => {
+    onApply({ ...prefs, sort });
+    close();
+  });
+}
+
+function typeFilterBar(filter, onChange, opts = {}) {
+  const wrap = h(`
+    <div class="chips-row">
+      <div class="chips">
+        <button type="button" class="chip ${filter === 'all' ? 'on' : ''}" data-f="all">${tr('Tout')}</button>
+        <button type="button" class="chip ${filter === 'movie' ? 'on' : ''}" data-f="movie">${tr('Films')}</button>
+        <button type="button" class="chip ${filter === 'tv' ? 'on' : ''}" data-f="tv">${tr('Series')}</button>
+        <button type="button" class="chip ${filter === 'anime' ? 'on' : ''}" data-f="anime">${tr('Animes')}</button>
+      </div>
+      <button type="button" class="chip-filter" aria-label="${tr('Filtres et tri')}">${I.sliders}</button>
+    </div>
+  `);
+
+  // Delegation : fiable meme si le SVG interne recoit le tap (iOS)
+  wrap.addEventListener('click', (e) => {
+    const filterBtn = e.target.closest('.chip-filter');
+    if (filterBtn) {
+      e.preventDefault();
+      e.stopPropagation();
+      opts.onFilter?.();
+      return;
+    }
+    const chip = e.target.closest('.chip[data-f]');
+    if (!chip || !wrap.contains(chip)) return;
+    wrap.querySelectorAll('.chip[data-f]').forEach((x) => x.classList.remove('on'));
+    chip.classList.add('on');
+    onChange(chip.dataset.f);
+  });
+  return wrap;
+}
 
 function viewToggle(onChange) {
   const btn = h('<button class="head-btn" aria-label="Changer de vue"></button>');
@@ -362,6 +463,7 @@ const CATALOGS = {
       { key: 'trend', label: 'Tendances', fetch: (p) => api.trending('movie', p) },
       { key: 'pop', label: 'Populaires', fetch: (p) => api.discoverMovies('popularity.desc', p) },
       { key: 'top', label: 'Mieux notes', fetch: (p) => api.discoverMovies('vote_average.desc', p) },
+      { key: 'foryou', label: 'Pour toi', fetch: (p) => fetchForYou('movie', p) },
       { key: 'seen', label: 'Vus', local: (i) => i.type === 'movie' && !i.isAnime && isSeen(i) },
       { key: 'fav', label: 'Favoris', local: (i) => i.type === 'movie' && !i.isAnime && i.favorite },
     ],
@@ -373,6 +475,7 @@ const CATALOGS = {
       { key: 'trend', label: 'Tendances', fetch: (p) => api.trending('tv', p) },
       { key: 'pop', label: 'Populaires', fetch: (p) => api.discoverTv('popularity.desc', p) },
       { key: 'top', label: 'Mieux notes', fetch: (p) => api.discoverTv('vote_average.desc', p) },
+      { key: 'foryou', label: 'Pour toi', fetch: (p) => fetchForYou('tv', p) },
       { key: 'seen', label: 'Vues', local: (i) => i.type === 'tv' && !i.isAnime && isStarted(i) },
       { key: 'fav', label: 'Favorites', local: (i) => i.type === 'tv' && !i.isAnime && i.favorite },
     ],
@@ -384,11 +487,56 @@ const CATALOGS = {
       { key: 'pop', label: 'Populaires', fetch: (p) => api.discoverAnime(p) },
       { key: 'airing', label: 'En diffusion', fetch: (p) => api.airingAnime(p) },
       { key: 'films', label: "Films d'animation", fetch: (p) => api.discoverAnimeMovies(p), type: 'movie' },
+      { key: 'foryou', label: 'Pour toi', fetch: (p) => fetchForYou('anime', p) },
       { key: 'seen', label: 'Vus', local: (i) => i.isAnime && (i.type === 'movie' ? isSeen(i) : isStarted(i)) },
       { key: 'fav', label: 'Favoris', local: (i) => i.isAnime && i.favorite },
     ],
   },
 };
+
+// Recommandations basees sur acteurs/realisateurs favoris + titres vus.
+async function fetchForYou(catalogType, page = 1) {
+  const people = [...state.people.values()];
+  const mediaType = catalogType === 'anime' ? 'tv' : catalogType;
+
+  if (people.length) {
+    const person = people[(page - 1) % people.length];
+    const personPage = Math.floor((page - 1) / people.length) + 1;
+    const data = await api.discoverByPerson(mediaType, person.id, personPage);
+    if (catalogType === 'anime') {
+      data.results = (data.results || []).filter((m) => isAnime(m));
+    } else if (catalogType === 'movie' || catalogType === 'tv') {
+      data.results = (data.results || []).filter((m) => !isAnime(m));
+    }
+    return data;
+  }
+
+  // Fallback : recommandations a partir des titres vus recemment
+  const watched = [...state.items.values()]
+    .filter((i) => {
+      if (catalogType === 'anime') return i.isAnime && (i.plays > 0 || watchedEpisodeCount(i) > 0);
+      if (catalogType === 'movie') return i.type === 'movie' && !i.isAnime && i.plays > 0;
+      return i.type === 'tv' && !i.isAnime && watchedEpisodeCount(i) > 0;
+    })
+    .sort((a, b) => b.updatedAt - a.updatedAt)
+    .slice(0, 8);
+
+  if (!watched.length) {
+    if (catalogType === 'anime') return api.discoverAnime(page);
+    if (catalogType === 'movie') return api.trending('movie', page);
+    return api.trending('tv', page);
+  }
+
+  const seed = watched[(page - 1) % watched.length];
+  try {
+    const d = await api.detail(seed.type, seed.tmdbId, { isAnime: seed.isAnime });
+    const recos = (d.recommendations?.results || []).filter((m) => m.media_type !== 'person');
+    return { results: recos, total_pages: 1 };
+  } catch {
+    if (catalogType === 'anime') return api.discoverAnime(page);
+    return api.trending(mediaType, page);
+  }
+}
 
 export async function renderCatalog(name) {
   const cfg = CATALOGS[name];
@@ -621,7 +769,7 @@ export async function renderDetail(type, id) {
     const btns = [];
 
     if (released) {
-      const seenBtn = h(`<button class="act ${seen ? 'on-seen' : ''}">${seen ? I.check : I.eye}<span>${seen ? tr('Vu') : tr('Marquer vu')}</span></button>`);
+      const seenBtn = h(`<button class="act ${seen ? 'on-seen' : ''}"><span class="act-ico">${seen ? I.check : I.eye}</span><span>${seen ? tr('Vu') : tr('Marquer vu')}</span></button>`);
       seenBtn.addEventListener('click', async () => {
         if (type === 'movie') {
           const cur = getItem(type, d.id)?.plays || 0;
@@ -645,9 +793,9 @@ export async function renderDetail(type, id) {
       btns.push(seenBtn);
     }
 
-    const favBtn = h(`<button class="act ${fav ? 'on-fav' : ''}">${fav ? I.heartFill : I.heart}<span>${tr('Favori')}</span></button>`);
-    const addBtn = h(`<button class="act ${wl ? 'on-list' : ''}">${wl ? I.check : I.plus}<span>${wl ? tr('Ajoute') : tr('Ajouter')}</span></button>`);
-    const plBtn = h(`<button class="act">${I.list}<span>${tr('Playlist')}</span></button>`);
+    const favBtn = h(`<button class="act ${fav ? 'on-fav' : ''}"><span class="act-ico">${fav ? I.heartFill : I.heart}</span><span>${tr('Favori')}</span></button>`);
+    const addBtn = h(`<button class="act ${wl ? 'on-list' : ''}"><span class="act-ico">${wl ? I.check : I.plus}</span><span>${wl ? tr('Ajoute') : tr('Ajouter')}</span></button>`);
+    const plBtn = h(`<button class="act"><span class="act-ico">${I.list}</span><span>${tr('Playlist')}</span></button>`);
 
     favBtn.addEventListener('click', async () => { await toggleFavorite(meta); renderActions(); });
     addBtn.addEventListener('click', async () => { await toggleAdd(meta); renderActions(); });
@@ -880,16 +1028,17 @@ async function loadSagaSections(page, d, type, id) {
   const universe = findUniverse({ type, tmdbId: id, collectionId, keywordIds });
   const seen = new Set();
 
-  function addSection(title, medias, mediaType, listingId) {
-    const filtered = medias.filter((m) => {
+  function addSection(title, medias, mediaType, listingId, { chrono = false } = {}) {
+    let list = medias.filter((m) => {
       const key = `${mediaType || m.media_type || type}_${m.id}`;
-      if (seen.has(key) || m.id === id) return false;
+      if (seen.has(key)) return false;
       seen.add(key);
       return true;
     });
-    if (!filtered.length) return;
+    if (!list.length) return;
+    if (chrono) list = sortByMcuChrono(list);
     const t = mediaType || type;
-    const sec = mediaSection(title, filtered, t, listingId);
+    const sec = mediaSection(title, list, t, listingId);
     if (sec) page.appendChild(sec);
   }
 
@@ -939,13 +1088,16 @@ async function loadSagaSections(page, d, type, id) {
     }
   }
 
-  all.sort((a, b) => {
-    const da = a.release_date || a.first_air_date || '';
-    const db = b.release_date || b.first_air_date || '';
-    return da.localeCompare(db);
-  });
-
-  addSection(universe.name, all, 'mixed', `uni-${universe.id}`);
+  if (universe.id === 'mcu') {
+    addSection(universe.name, all, 'mixed', `uni-${universe.id}`, { chrono: true });
+  } else {
+    all.sort((a, b) => {
+      const da = a.release_date || a.first_air_date || '';
+      const db = b.release_date || b.first_air_date || '';
+      return da.localeCompare(db);
+    });
+    addSection(universe.name, all, 'mixed', `uni-${universe.id}`);
+  }
 }
 
 function seasonBlock(meta, detail, s, onChange) {
@@ -1121,17 +1273,15 @@ export function renderWatchlist() {
   bindBack(page);
   v.appendChild(page);
 
-  const typeChips = h(`
-    <div class="chips">
-      <button class="chip on" data-f="all">${tr('Tout')}</button>
-      <button class="chip" data-f="movie">${tr('Films')}</button>
-      <button class="chip" data-f="tv">${tr('Series')}</button>
-      <button class="chip" data-f="anime">${tr('Animes')}</button>
-    </div>
-  `);
+  const prefs = loadListPrefs('watchlist');
+  let filter = prefs.filter || 'all';
+  let sort = prefs.sort || 'recent';
+
   const holder = h('<div></div>');
 
-  let filter = 'all';
+  function persist() {
+    saveListPrefs('watchlist', { filter, sort });
+  }
 
   function renderGroup(items) {
     if (getViewMode() === 'grid') {
@@ -1167,7 +1317,7 @@ export function renderWatchlist() {
     if (filter === 'movie') items = items.filter((i) => i.type === 'movie' && !i.isAnime);
     if (filter === 'tv') items = items.filter((i) => i.type === 'tv' && !i.isAnime);
     if (filter === 'anime') items = items.filter((i) => i.isAnime);
-    items.sort((a, b) => b.updatedAt - a.updatedAt);
+    items = sortListItems(items, sort);
 
     const any = renderByStatus(holder, items, itemStatus, renderGroup);
     if (!any) {
@@ -1175,19 +1325,29 @@ export function renderWatchlist() {
     }
   }
 
+  const typeChips = typeFilterBar(filter, (f) => {
+    filter = f;
+    persist();
+    draw();
+  }, {
+    onFilter: () => {
+      const all = [...state.items.values()].filter((i) => i.watchlist);
+      openListFilterSheet({
+        prefs: { filter, sort },
+        showChrono: looksLikeMcu(all),
+        onApply: (p) => {
+          sort = p.sort || 'recent';
+          persist();
+          draw();
+        },
+      });
+    },
+  });
+
   const actions = page.querySelector('.head-actions');
   actions.prepend(viewToggle(draw));
   actions.prepend(sectionsToggle(draw));
   page.append(typeChips, holder);
-
-  typeChips.querySelectorAll('.chip').forEach((c) =>
-    c.addEventListener('click', () => {
-      filter = c.dataset.f;
-      typeChips.querySelectorAll('.chip').forEach((x) => x.classList.remove('on'));
-      c.classList.add('on');
-      draw();
-    })
-  );
   draw();
 }
 
@@ -1326,7 +1486,13 @@ export function renderPlaylist(id) {
   });
 
   const holder = h('<div></div>');
-  page.appendChild(holder);
+  const prefs = loadListPrefs('playlist_' + id);
+  let filter = prefs.filter || 'all';
+  let sort = prefs.sort || 'recent';
+
+  function persist() {
+    saveListPrefs('playlist_' + id, { filter, sort });
+  }
 
   function renderGroup(entries) {
     if (getViewMode() === 'grid') {
@@ -1358,11 +1524,44 @@ export function renderPlaylist(id) {
 
   function draw() {
     holder.innerHTML = '';
-    const any = renderByStatus(holder, pl.items, (e) => itemStatus(state.items.get(e.id)), renderGroup);
+    let entries = [...pl.items];
+    if (filter === 'movie') entries = entries.filter((e) => e.type === 'movie' && !state.items.get(e.id)?.isAnime);
+    if (filter === 'tv') entries = entries.filter((e) => e.type === 'tv' && !state.items.get(e.id)?.isAnime);
+    if (filter === 'anime') entries = entries.filter((e) => state.items.get(e.id)?.isAnime);
+    entries = sortListItems(
+      entries.map((e) => ({
+        ...e,
+        updatedAt: state.items.get(e.id)?.updatedAt || 0,
+      })),
+      sort
+    );
+
+    const any = renderByStatus(holder, entries, (e) => itemStatus(state.items.get(e.id)), renderGroup);
     if (!any) {
       holder.appendChild(emptyState('list', tr('Playlist vide'), tr('Ajoute des titres depuis leur fiche.')));
     }
   }
+
+  const typeChips = typeFilterBar(filter, (f) => {
+    filter = f;
+    persist();
+    draw();
+  }, {
+    onFilter: () => {
+      const nameHint = /marvel|mcu/i.test(pl.name || '');
+      openListFilterSheet({
+        prefs: { filter, sort },
+        showChrono: nameHint || looksLikeMcu(pl.items),
+        onApply: (p) => {
+          sort = p.sort || 'recent';
+          persist();
+          draw();
+        },
+      });
+    },
+  });
+
+  page.append(typeChips, holder);
   draw();
 }
 
@@ -1395,6 +1594,7 @@ export function renderProfile() {
   const links = [
     ['bookmark', tr('Ma liste'), () => (location.hash = '#/watchlist')],
     ['list', tr('Mes playlists'), () => (location.hash = '#/playlists')],
+    ['heart', tr('Acteurs favoris'), () => (location.hash = '#/people')],
     ['popcorn', tr('Mes statistiques'), () => (location.hash = '#/stats')],
     ['settings', tr('Parametres'), () => (location.hash = '#/settings')],
     ['download', tr('Exporter mes donnees (JSON)'), doExport],
@@ -1443,8 +1643,6 @@ export function renderProfile() {
 
 /* ============================== RECHERCHE ============================== */
 
-let searchLast = { q: '', results: [] };
-
 export function renderSearch() {
   const v = $view();
   v.innerHTML = '';
@@ -1466,11 +1664,13 @@ export function renderSearch() {
       <div class="search-bar">
         ${I.search}
         <input type="search" placeholder="${tr('Film, serie, anime...')}" autocomplete="off" enterkeyhint="search">
+        <button type="button" class="search-clear" hidden aria-label="${tr('Effacer')}">${I.x}</button>
       </div>
       <a class="head-btn adv-btn" href="#/advanced" aria-label="${tr('Recherche avancee')}">${I.sliders}</a>
     </div>
   `);
   const bar = barWrap.querySelector('.search-bar');
+  const clearBtn = bar.querySelector('.search-clear');
   const suggestTitle = h(`<h2 class="search-suggest-title">${tr('Tendances')}</h2>`);
   const results = h('<div class="grid"></div>');
   page.append(barWrap, suggestTitle, results);
@@ -1478,6 +1678,10 @@ export function renderSearch() {
   const input = bar.querySelector('input');
   let timer = null;
   let seq = 0;
+
+  function syncClear() {
+    clearBtn.hidden = !input.value;
+  }
 
   function draw(list, showTitle = false) {
     results.innerHTML = '';
@@ -1511,12 +1715,14 @@ export function renderSearch() {
 
   async function run(q) {
     const my = ++seq;
-    if (!q.trim()) { loadSuggestions(); return; }
+    if (!q.trim()) {
+      loadSuggestions();
+      return;
+    }
     suggestTitle.style.display = 'none';
     try {
       const data = await api.search(q.trim());
       if (my !== seq) return;
-      searchLast = { q, results: data.results };
       draw(data.results);
     } catch {
       results.innerHTML = '';
@@ -1524,7 +1730,17 @@ export function renderSearch() {
     }
   }
 
+  function clearSearch() {
+    input.value = '';
+    syncClear();
+    ++seq;
+    loadSuggestions();
+    input.focus();
+  }
+
+  clearBtn.addEventListener('click', clearSearch);
   input.addEventListener('input', () => {
+    syncClear();
     clearTimeout(timer);
     timer = setTimeout(() => run(input.value), 350);
   });
@@ -1532,13 +1748,9 @@ export function renderSearch() {
     if (e.key === 'Enter') { clearTimeout(timer); run(input.value); input.blur(); }
   });
 
-  // restaure la derniere recherche ou affiche les tendances
-  if (searchLast.q) {
-    input.value = searchLast.q;
-    draw(searchLast.results);
-  } else {
-    loadSuggestions();
-  }
+  // Toujours repartir a zero a l'ouverture
+  syncClear();
+  loadSuggestions();
   setTimeout(() => input.focus(), 80);
 }
 
@@ -2064,6 +2276,20 @@ export async function renderBrowse(mediaType, genreId) {
 
 /* ============================== PERSONNE (acteur) ============================== */
 
+function personDeptLabel(dept) {
+  if (!dept) return '';
+  const map = {
+    Acting: tr('Acteur'),
+    Directing: tr('Realisateur'),
+    Writing: tr('Scenario'),
+    Production: tr('Production'),
+    Sound: tr('Musique'),
+    Camera: tr('Camera'),
+    Editing: tr('Montage'),
+  };
+  return map[dept] || dept;
+}
+
 export async function renderPerson(id) {
   const v = $view();
   v.innerHTML = '';
@@ -2087,13 +2313,42 @@ export async function renderPerson(id) {
   bindBack(page);
 
   const photo = img(p.profile_path, 'w342');
-  page.appendChild(h(`
+  const dept = personDeptLabel(p.known_for_department);
+
+  const favBtn = h(`<button type="button" class="person-fav"></button>`);
+  function syncFav() {
+    const on = isFavoritePerson(p.id);
+    favBtn.classList.toggle('on', on);
+    favBtn.innerHTML = `
+      <span class="person-fav-ico">${on ? I.heartFill : I.heart}</span>
+      <span>${on ? tr('Favori') : tr('Ajouter aux favoris')}</span>
+    `;
+  }
+  syncFav();
+  favBtn.addEventListener('click', async () => {
+    await toggleFavoritePerson({
+      id: p.id,
+      name: p.name,
+      profile: p.profile_path,
+      knownFor: p.known_for_department,
+    });
+    toast(isFavoritePerson(p.id) ? tr('Ajoute aux favoris') : tr('Retire des favoris'));
+    syncFav();
+  });
+
+  const hero = h(`
     <div class="person-hero">
       <div class="person-photo">${photo ? `<img src="${photo}" alt="">` : `<span class="no-img">${esc((p.name || '?').split(' ').map((w) => w[0]).slice(0, 2).join(''))}</span>`}</div>
       <h1 class="person-name">${esc(p.name || '')}</h1>
-      ${p.birthday ? `<div class="person-sub">${p.birthday.split('-').reverse().join('/')}${p.place_of_birth ? ' - ' + esc(p.place_of_birth) : ''}</div>` : ''}
+      <div class="person-meta">
+        ${dept ? `<span class="person-chip">${esc(dept)}</span>` : ''}
+        ${p.birthday ? `<span>${p.birthday.split('-').reverse().join('/')}</span>` : ''}
+        ${p.place_of_birth ? `<span>${esc(p.place_of_birth)}</span>` : ''}
+      </div>
     </div>
-  `));
+  `);
+  hero.appendChild(favBtn);
+  page.appendChild(hero);
 
   if (p.biography) {
     const bio = h(`<p class="overview clamp">${esc(p.biography)}</p>`);
@@ -2129,6 +2384,38 @@ export async function renderPerson(id) {
     sec.appendChild(grid);
     page.appendChild(sec);
   }
+}
+
+export function renderPeopleFavorites() {
+  const v = $view();
+  v.innerHTML = '';
+  const page = h('<div class="page"></div>');
+  page.appendChild(pageHead(tr('Acteurs favoris'), { back: true }));
+  bindBack(page);
+  v.appendChild(page);
+
+  const people = [...state.people.values()].sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+  if (!people.length) {
+    page.appendChild(emptyState('heart', tr('Aucun favori'), tr('Ajoute des acteurs ou realisateurs depuis leur fiche.')));
+    return;
+  }
+
+  const list = h('<div class="media-list people-fav-list"></div>');
+  for (const p of people) {
+    const src = img(p.profile, 'w185');
+    const row = h(`
+      <a class="media-row people-fav-row" href="#/person/${p.id}">
+        <span class="people-fav-photo">${src ? `<img src="${src}" alt="">` : `<span class="no-img">${esc((p.name || '?').slice(0, 1))}</span>`}</span>
+        <span class="inf">
+          <span class="t">${esc(p.name)}</span>
+          <span class="s">${esc(personDeptLabel(p.knownFor) || tr('Personne'))}</span>
+        </span>
+        <span class="people-fav-heart">${I.heartFill}</span>
+      </a>
+    `);
+    list.appendChild(row);
+  }
+  page.appendChild(list);
 }
 
 /* ============================== RECHERCHE AVANCEE ============================== */
