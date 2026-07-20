@@ -274,4 +274,30 @@
     margin-left: auto;
     margin-right: auto;
   }
+
+  /* ---- Recherche ----
+     Verifie dans views.js : renderSearch() (~1294) construit .search-bar-wrap
+     (contenant .search-bar + le lien .adv-btn vers /advanced) suivi de
+     .search-suggest-title puis .grid pour les resultats ; renderAdvanced()
+     (~1927) n'a pas de classe .search-page/.adv-page sur .page, seul .adv-form
+     (unique au fichier) identifie la page, suivie des memes resultats en
+     .grid. Le champ et les pickers sont centres a 760px, les resultats
+     restent en pleine largeur (herite du .grid elargi Task 4). */
+  .search-bar-wrap {
+    max-width: 760px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+  .search-bar-wrap .search-bar {
+    height: 52px;
+    padding: 0 18px;
+    box-sizing: border-box;
+  }
+  .search-bar-wrap .search-bar input { font-size: 18px; }
+
+  .adv-form {
+    max-width: 760px;
+    margin-left: auto;
+    margin-right: auto;
+  }
 }
