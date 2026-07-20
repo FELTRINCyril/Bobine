@@ -9,6 +9,18 @@
 #deskbar { display: none; }
 .shelf-arrow { display: none; }
 
+/* Garde souris/trackpad (toutes largeurs) : app.css pose
+   overscroll-behavior-y: none sur body pour bloquer le
+   pull-to-refresh tactile. Mais body est un conteneur de scroll
+   non scrollable (overflow-x: hidden -> overflow-y calcule auto),
+   et cette regle empeche alors le geste molette/trackpad de se
+   propager jusqu'a html, le vrai scrolleur : page inscrollable
+   sur Chrome desktop. On retablit la propagation pour les
+   pointeurs fins uniquement (aucun impact tactile). */
+@media (pointer: fine) {
+  body { overscroll-behavior-y: auto; }
+}
+
 @media (min-width: 1024px) {
 
   /* ---- Tokens : theme Afterdark, ecrase tout skin/mode mobile ----
