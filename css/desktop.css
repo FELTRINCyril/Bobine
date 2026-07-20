@@ -163,4 +163,35 @@
   .shelf-wrap:hover .shelf-arrow { opacity: 1; }
   .shelf-wrap.at-start .shelf-arrow.prev,
   .shelf-wrap.at-end .shelf-arrow.next { opacity: 0; pointer-events: none; }
+
+  /* ---- Catalogues et grilles (movies/series/anime, browse, listing, library) ---- */
+  .page-title { font-size: 34px; }
+
+  /* pageHead() (js/views.js) met toujours une loupe (<a class="head-btn"
+     href="#/search">) dans .head-actions : deja dans le deskbar, donc
+     redondante. Mais .head-actions peut aussi contenir le bouton
+     "vue grille/lignes" (viewToggle(), un <button>) sur library/listing/
+     playlist : on ne cache donc QUE le lien <a>, jamais tout .head-actions,
+     pour garder ce bouton et le bouton retour (qui est hors .head-actions,
+     genere par pageHead avec back:true) fonctionnels. */
+  .head-actions a.head-btn { display: none; }
+
+  .chips { padding: 8px var(--page-pad) 4px; }
+
+  .grid {
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 18px 14px;
+    padding: 12px var(--page-pad);
+  }
+
+  /* Vue "lignes" (media-list) des pages library/playlist : en mobile les
+     lignes tiennent la largeur de l'ecran (~380px) ; sur grand ecran
+     .page n'a plus de max-width, donc on borne la liste pour rester
+     lisible (une ligne de texte + poster ne doit pas s'etirer a 1700px). */
+  .media-list { max-width: 720px; }
+
+  /* Bouton "Charger plus" (renderCatalog/renderBrowse) : garde sa largeur
+     mais bornee, sinon un bouton pleine largeur sur un ecran large est
+     disproportionne par rapport a la grille au-dessus. */
+  .loadmore-wrap { max-width: 720px; }
 }
