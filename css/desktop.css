@@ -194,4 +194,84 @@
      mais bornee, sinon un bouton pleine largeur sur un ecran large est
      disproportionne par rapport a la grille au-dessus. */
   .loadmore-wrap { max-width: 720px; }
+
+  /* ---- Page detail : hero backdrop pleine largeur ----
+     Ajout hors bloc litteral du brief : la regle generique ".page
+     { padding-top: 84px }" (section "Pages" plus haut) pousse .detail-hero
+     de 84px sous le deskbar. Or le bouton retour ci-dessous est positionne
+     en absolu DANS .detail-hero a top:84px : sans ce correctif il tombe a
+     168px du haut d'ecran, sous le deskbar. Comme .page-home (deja
+     padding-top:0 plus haut), le hero doit passer plein cadre sous le
+     deskbar transparent. */
+  .page:has(> .detail-hero) { padding-top: 0; }
+
+  .detail-hero { height: 62vh; min-height: 420px; }
+  .detail-hero .backdrop { width: 100%; height: 100%; object-fit: cover; }
+  .detail-hero .shade {
+    background:
+      linear-gradient(to top, var(--bg) 2%, rgba(0, 0, 0, 0.35) 45%, transparent 75%),
+      linear-gradient(to right, rgba(0, 0, 0, 0.6), transparent 50%);
+  }
+  .detail-hero .head-btn {
+    display: grid;
+    top: 84px;
+    left: var(--page-pad);
+  }
+
+  /* contenu superpose au bas du hero, largeur contenue */
+  .detail-top {
+    margin: -180px auto 0;
+    padding: 0 var(--page-pad);
+    max-width: 1280px;
+    position: relative;
+    z-index: 2;
+    align-items: flex-end;
+    gap: 28px;
+  }
+  .detail-top .poster { width: 200px; }
+  .detail-id h1 { font-size: 44px; line-height: 1.05; }
+  .detail-meta { font-size: 15px; }
+
+  .genres, .detail-actions, .plays-bar-slot {
+    max-width: 1280px;
+    margin-left: auto;
+    margin-right: auto;
+    padding-left: var(--page-pad);
+    padding-right: var(--page-pad);
+  }
+  /* Ajout : .detail-actions est "display: grid" en mobile (app.css) ;
+     sans display:flex ici, "flex: 0 0 auto" sur .act n'a aucun effet et
+     justify-content ne produit pas l'alignement a gauche voulu. */
+  .detail-actions { display: flex; justify-content: flex-start; gap: 12px; }
+  .detail-actions .act { flex: 0 0 auto; min-width: 128px; cursor: pointer; }
+
+  /* Ajout hors bloc litteral du brief : .overview / .overview-more / .season
+     utilisent des marges fixes de 18px en mobile (app.css), pas --page-pad.
+     Sur grand ecran ca desalignerait le synopsis et les blocs saisons par
+     rapport au reste de la fiche (cadre a --page-pad = 56px partout
+     ailleurs). */
+  .overview, .overview-more { padding-left: var(--page-pad); padding-right: var(--page-pad); }
+  .season { margin-left: var(--page-pad); margin-right: var(--page-pad); }
+
+  /* saisons, synopsis, "ou regarder", recommandations, saga, casting :
+     meme gabarit centre.
+     Note d'implementation (verifie dans views.js:443-960) : il n'existe pas
+     de ".season-list" ni de ".overview" englobant au premier niveau de
+     .page. renderDetail() construit chaque bloc via section()/mediaSection()
+     (views.js:74-105), qui produit toujours <section class="section">, soit
+     ajoute directement dans .page (Synopsis, Ou regarder, Recommandations,
+     Casting), soit dans un <div> holder sans classe (seasonsHolder pour
+     "Episodes" ~ligne 675, sagaHolder pour les sagas/univers ~ligne 719,
+     seasonBlock() ~ligne 794 genere les .season a l'interieur de ce
+     .section "Episodes"). Le vrai selecteur commun est donc .section, cible
+     ici seulement sur la page detail (marqueur : presence de .detail-hero
+     comme premier enfant de .page, via ~ et un descendant) pour ne pas
+     recadrer les rayons plein ecran de l'accueil qui portent aussi la
+     classe .section. */
+  .detail-hero ~ .section,
+  .detail-hero ~ div .section {
+    max-width: 1280px;
+    margin-left: auto;
+    margin-right: auto;
+  }
 }
