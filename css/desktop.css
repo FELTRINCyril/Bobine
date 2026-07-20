@@ -7,6 +7,7 @@
 /* #deskbar existe dans le DOM en mobile : on le neutralise
    hors media query, c'est la seule regle globale du fichier. */
 #deskbar { display: none; }
+.shelf-arrow { display: none; }
 
 @media (min-width: 1024px) {
 
@@ -135,4 +136,28 @@
   /* bouton watchlist rapide : visible au survol seulement (au tap en mobile) */
   .card .card-quick { opacity: 0; transition: opacity 0.15s; }
   .card:hover .card-quick, .card .card-quick.on { opacity: 1; }
+
+  /* ---- Fleches de shelves ---- */
+  .hscroll { position: relative; }
+  .shelf-arrow {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 48px;
+    border: 0;
+    background: linear-gradient(to right, rgba(0, 0, 0, 0.75), transparent);
+    color: #fff;
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 0.15s;
+    z-index: 3;
+    display: grid;
+    place-items: center;
+  }
+  .shelf-arrow svg { width: 30px; height: 30px; }
+  .shelf-arrow.prev { left: 0; }
+  .shelf-arrow.next { right: 0; background: linear-gradient(to left, rgba(0, 0, 0, 0.75), transparent); }
+  .hscroll:hover .shelf-arrow { opacity: 1; }
+  .hscroll.at-start .shelf-arrow.prev,
+  .hscroll.at-end .shelf-arrow.next { opacity: 0; pointer-events: none; }
 }

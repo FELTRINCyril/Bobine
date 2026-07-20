@@ -43,5 +43,41 @@ export function syncDeskbar(hash) {
   });
 }
 
-// Task 3 : fleches de defilement des rangees. Stub pour l'instant.
-export function enhanceShelves() {}
+// Fleches de defilement des rangees horizontales, desktop uniquement.
+// Un MutationObserver equipe chaque .hscroll rendu par les vues ; les
+// boutons sont ignores en mobile (media query + pointer fine).
+const DESK = window.matchMedia('(min-width: 1024px)');
+
+function equipShelf(shelf) {
+  if (shelf.dataset.arrows) return;
+  shelf.dataset.arrows = '1';
+  const inner = shelf.querySelector('.hscroll-inner');
+  if (!inner) return;
+  const mk = (dir, icon) => {
+    const b = h(`<button class="shelf-arrow ${dir}" type="button" aria-label="${dir === 'prev' ? tr('Precedent') : tr('Suivant')}">${icon}</button>`);
+    b.addEventListener('click', () => {
+      inner.scrollBy({ left: (dir === 'prev' ? -1 : 1) * inner.clientWidth * 0.9, behavior: 'smooth' });
+    });
+    return b;
+  };
+  shelf.append(mk('prev', I.back), mk('next', I.chevRight));
+
+  const refresh = () => {
+    const max = inner.scrollWidth - inner.clientWidth - 4;
+    shelf.classList.toggle('at-start', inner.scrollLeft <= 4);
+    shelf.classList.toggle('at-end', inner.scrollLeft >= max);
+  };
+  inner.addEventListener('scroll', refresh, { passive: true });
+  refresh();
+}
+
+export function enhanceShelves() {
+  if (!DESK.matches && !DESK.addEventListener) return;
+  const scan = () => {
+    if (!DESK.matches) return;
+    document.querySelectorAll('#view .hscroll').forEach(equipShelf);
+  };
+  new MutationObserver(scan).observe(document.getElementById('view'), { childList: true, subtree: true });
+  DESK.addEventListener('change', scan);
+  scan();
+}
