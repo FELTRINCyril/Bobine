@@ -300,4 +300,69 @@
     margin-left: auto;
     margin-right: auto;
   }
+
+  /* ---- Pages locales : watchlist, playlists, profil, stats, reglages,
+     personne, onboarding ----
+     Choix documente (verifie en lisant chaque render*() de js/views.js et
+     js/onboarding.js) : il n'existe PAS de classes racines .page-watchlist /
+     .page-profile / .page-stats / .page-settings / .page-person -> render*()
+     ne pose toujours que la classe generique .page. L'alternative generique
+     du brief (`.page:not(.page-home) > * { max-width: 1100px }`) est ecartee :
+     appliquee a tous les enfants directs de .page, elle aurait aussi recadre
+     .page-head/.grid des catalogues et notamment .detail-top, deja gere en
+     1280px avec marge negative (tache 5) -> collision certaine.
+     Strategie retenue, plus sure : capper .page LUI-MEME a 1100px, mais
+     seulement sur les pages concernees, en le reperant via :has() (deja
+     utilise ligne ~206 pour .detail-hero) sur un bloc interne propre a
+     chaque vue, verifie unique a cette vue par grep sur js/*.js. Capper .page
+     plutot qu'un bloc interne garde le titre (.page-head, padding
+     var(--page-pad)) et le contenu alignes sur le meme repere gauche : pas
+     de centrage independant qui les desalignerait.
+     - watchlist (renderWatchlist), playlists (renderPlaylists), playlist
+       (renderPlaylist) : deja lisibles sans ajout ici. Leur contenu est soit
+       .grid (pleine largeur, deja gere tache 4 - exception volontaire, comme
+       les catalogues), soit .media-list (deja limite a 720px lignes 187-191,
+       taches 5/6). Rien a dupliquer.
+     - profil (renderProfile) : marqueur .stats-grid enfant DIRECT de .page
+       (sur /stats, .stats-grid est imbriquee dans .stats-page -> jamais
+       enfant direct de .page, pas de collision entre les deux vues).
+     - stats (renderStats) : marqueur .stats-page.
+     - reglages (renderSettings) : marqueur .settings-page (deja son propre
+       padding var(--page-pad), donc deja aligne avec le titre).
+     - personne (renderPerson) : marqueur .person-hero, enfant direct de
+       .page. Une fois .page capee, .overview/.section/.grid de la
+       filmographie heritent naturellement de la largeur reduite (padding
+       propre var(--page-pad) deja en place) : pas besoin de regle en plus.
+     Reserve documentee : a l'interieur du profil, .stats-grid et
+     .settings-list gardent leur marge fixe mobile (18px, pas
+     var(--page-pad)) -> leger decalage horizontal (18 vs 56px) avec le
+     titre "Profil" sur grand ecran. Cosmetique uniquement ; non retouche
+     pour ne pas risquer de deregler ces classes ailleurs (elles restent
+     sinon simples, sans dependance de contexte). */
+  .page:has(> .stats-grid),
+  .page:has(.stats-page),
+  .page:has(> .settings-page),
+  .page:has(> .person-hero) {
+    max-width: 1100px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  /* Grilles de stats (profil : 6 cases, page stats : 8) : sur 1100px de
+     large, 2 colonnes fixes (mobile) etirent chaque carte a plus de 500px,
+     quasi vide visuellement. Plus de colonnes = cartes proportionnees. */
+  .stats-grid { grid-template-columns: repeat(3, 1fr); }
+  .stats-grid.stats-grid--detail { grid-template-columns: repeat(4, 1fr); }
+
+  /* Reglages : les segments theme/langue (grid 1fr 1fr) ne doivent pas
+     s'etirer sur toute la largeur de .settings-page (1100px). Scope a
+     .settings-page : .seg.seg-3 (recherche avancee, tache 6) vit dans
+     .adv-form, jamais dans .settings-page -> aucune collision. */
+  .settings-page .seg { max-width: 480px; }
+
+  /* ---- Onboarding (premiere ouverture) ----
+     Verifie dans js/onboarding.js : renderOnboarding() pose bien
+     <div class="page onboarding">, la classe .onb (mentionnee a titre
+     d'exemple dans le brief) n'existe pas dans le code. */
+  .onboarding { max-width: 640px; margin: 0 auto; }
 }
