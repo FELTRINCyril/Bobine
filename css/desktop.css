@@ -11,8 +11,26 @@
 
 @media (min-width: 1024px) {
 
-  /* ---- Tokens : theme Afterdark, ecrase le theme mobile ---- */
-  :root, :root[data-theme="light"] {
+  /* ---- Tokens : theme Afterdark, ecrase tout skin/mode mobile ----
+     Adapte au nouveau mecanisme de themes (v1.20) : css/themes.js pose
+     data-skin (10 valeurs, defaut "cinema") + data-mode ("dark"/"light")
+     sur <html> (plus data-theme, retire). Les tokens couleur vivent
+     desormais dans css/themes.css sous la forme
+     ":root[data-skin=X][data-mode=Y] { --bg: ...; }", specificite
+     (0,3,0) - superieure a l'ancien simple ":root" (0,1,0) utilise ici.
+     Comme css/themes.css est charge AVANT ce fichier dans index.html, un
+     simple ":root" ne suffit plus a gagner la cascade (specificite trop
+     faible, peu importe l'ordre de chargement) : le clair ou un skin
+     colore fuitait sur desktop. On egalise la specificite avec des
+     selecteurs d'attribut de meme forme (presence, sans valeur precise -
+     matche donc tous les skins/modes) : specificite identique (0,3,0),
+     depart ex aequo tranche par l'ordre de chargement (ce fichier en
+     dernier) en faveur du desktop. Le simple ":root" est garde en plus
+     pour le tout debut de rendu si data-skin/data-mode ne sont pas
+     encore poses (ne devrait pas arriver : le script inline d'index.html
+     les pose en tete de <head>, avant le chargement de ce CSS). */
+  :root,
+  :root[data-skin][data-mode] {
     --bg: #000;
     --surface: #101010;
     --surface-2: #1a1a1a;
@@ -22,9 +40,10 @@
     --text-muted: #a3a3a3;
     --text-faint: #6b6b6b;
     --page-pad: 56px;
-    /* Theme clair : ces 3 tokens ne sont pas repris ci-dessus, donc le
-       theme clair (app.css ~33-45) les faisait fuiter sur desktop. On
-       recopie les valeurs du :root sombre (app.css ~14-18). */
+    /* Idem : ces 3 tokens ne sont pas repris ci-dessus, donc un skin/mode
+       clair (valeurs definies par skin dans css/themes.css) les ferait
+       fuiter sur desktop sans cette recopie des valeurs du skin "cinema"
+       sombre (css/themes.css ~16-19, le skin par defaut). */
     --accent-soft: rgba(255, 61, 110, 0.14);
     --seen: #3ddc97;
     --seen-soft: rgba(61, 220, 151, 0.14);
@@ -84,7 +103,7 @@
 
   /* ---- Accueil : hero plein ecran large ---- */
   .page-home { padding-top: 0; }
-  /* Evite un layout shift : la regle mobile (app.css ~400) pose
+  /* Evite un layout shift : la regle mobile (app.css ~382) pose
      min-height: 62vh sur ce slot avant que .cine-hero (78vh desktop,
      ci-dessous) ne soit mesure. */
   .cine-hero-slot { min-height: 78vh; }
@@ -245,13 +264,20 @@
   .detail-id h1 { font-size: 44px; line-height: 1.05; }
   .detail-meta { font-size: 15px; }
 
-  .genres, .detail-actions, .plays-bar-slot {
+  .genres, .detail-actions, .plays-bar-slot, .detail-tabs {
     max-width: 1280px;
     margin-left: auto;
     margin-right: auto;
     padding-left: var(--page-pad);
     padding-right: var(--page-pad);
   }
+  /* Ajout (v1.20) : renderDetail() a ete restructure en onglets
+     (Apercu/Episodes/Casting, views.js:848-890) ; .detail-tabs (la barre
+     d'onglets, "display:flex" avec des boutons "flex:1" en mobile) est un
+     enfant direct de .page comme .genres/.detail-actions/.plays-bar-slot
+     ci-dessus, mais n'etait pas dans ce groupe -> sans elle, la barre
+     s'etirait bord a bord sur toute la largeur de l'ecran au lieu de
+     rester cadree a 1280px avec le reste de la fiche. */
   /* Ajout : .detail-actions est "display: grid" en mobile (app.css) ;
      sans display:flex ici, "flex: 0 0 auto" sur .act n'a aucun effet et
      justify-content ne produit pas l'alignement a gauche voulu. */
@@ -268,19 +294,25 @@
 
   /* saisons, synopsis, "ou regarder", recommandations, saga, casting :
      meme gabarit centre.
-     Note d'implementation (verifie dans views.js:443-960) : il n'existe pas
-     de ".season-list" ni de ".overview" englobant au premier niveau de
-     .page. renderDetail() construit chaque bloc via section()/mediaSection()
-     (views.js:74-105), qui produit toujours <section class="section">, soit
-     ajoute directement dans .page (Synopsis, Ou regarder, Recommandations,
-     Casting), soit dans un <div> holder sans classe (seasonsHolder pour
-     "Episodes" ~ligne 675, sagaHolder pour les sagas/univers ~ligne 719,
-     seasonBlock() ~ligne 794 genere les .season a l'interieur de ce
-     .section "Episodes"). Le vrai selecteur commun est donc .section, cible
-     ici seulement sur la page detail (marqueur : presence de .detail-hero
-     comme premier enfant de .page, via ~ et un descendant) pour ne pas
-     recadrer les rayons plein ecran de l'accueil qui portent aussi la
-     classe .section. */
+     Note d'implementation, reverifiee contre le DOM v1.20 (fiche en
+     onglets, views.js:848-1021) : renderDetail() pose desormais
+     <div class="detail-tabs"> (barre d'onglets, geree ci-dessus) suivie de
+     <div class="detail-panels"> contenant 2-3 <div class="detail-panel"
+     data-panel="overview|episodes|more" [hidden]>, un par onglet. Chaque
+     bloc (Synopsis, Studios, Equipe, Ou regarder, Streaming AniList,
+     Recommandations dans le panneau "overview" ; Episodes -> .season dans
+     le panneau "episodes" ; Casting/equipe technique dans le panneau
+     "more") est toujours construit via section()/mediaSection()
+     (views.js:93-124), qui produit <section class="section">, ajoute
+     directement dans son panneau (jamais dans un holder intermediaire
+     supplementaire). Le selecteur ci-dessous n'a donc PAS besoin de
+     changer : ".detail-hero ~ div .section" est un combinateur de
+     descendance (profondeur illimitee) - il matche deja
+     .detail-hero ~ .detail-panels (sibling direct) puis .section a
+     n'importe quelle profondeur en dessous (.detail-panel > .section),
+     que ce soit un ou deux niveaux de <div> intermediaires. Verifie
+     manuellement : aucun changement necessaire ici, seule la barre
+     d'onglets (.detail-tabs, plus haut) manquait au cadrage. */
   .detail-hero ~ .section,
   .detail-hero ~ div .section {
     max-width: 1280px;
@@ -289,13 +321,17 @@
   }
 
   /* ---- Recherche ----
-     Verifie dans views.js : renderSearch() (~1294) construit .search-bar-wrap
-     (contenant .search-bar + le lien .adv-btn vers /advanced) suivi de
-     .search-suggest-title puis .grid pour les resultats ; renderAdvanced()
-     (~1927) n'a pas de classe .search-page/.adv-page sur .page, seul .adv-form
-     (unique au fichier) identifie la page, suivie des memes resultats en
-     .grid. Le champ et les pickers sont centres a 760px, les resultats
-     restent en pleine largeur (herite du .grid elargi Task 4). */
+     Reverifie dans views.js (v1.20) : renderSearch() (~1646) pose bien
+     <div class="page search-page"> (la classe .search-page existe
+     desormais, contrairement a une note precedente - mais aucun selecteur
+     ci-dessous n'en depend, rien a changer) puis construit
+     .search-bar-wrap (contenant .search-bar + le lien .adv-btn vers
+     /advanced) suivi de .search-suggest-title puis .grid pour les
+     resultats ; renderAdvanced() (~2499) n'a toujours pas de classe
+     dediee sur .page, seul .adv-form (unique au fichier) identifie la
+     page, suivie des memes resultats en .grid. Le champ et les pickers
+     sont centres a 760px, les resultats restent en pleine largeur
+     (herite du .grid elargi de la section Catalogues). */
   .search-bar-wrap {
     max-width: 760px;
     margin-left: auto;
@@ -336,12 +372,18 @@
        deja gere tache 4 - exception volontaire, comme les catalogues), soit
        .media-list (deja limite a 720px lignes 187-191, taches 5/6) mais
        dans un <div> holder intermediaire, jamais enfant direct de .page.
-     - playlists (renderPlaylists, views.js:1063) : SEULE vue ou .media-list
-       est pose en enfant DIRECT de .page (verifie par grep sur les 4 usages
-       de .media-list dans views.js : lignes 992, 1183, 1497 sont toutes
-       dans un holder). Sans cap, .page (plus de max-width sur grand ecran)
-       laisse .media-list (720px, aligne a gauche par defaut) colle au bord
-       gauche au lieu d'etre centre avec le reste des pages locales.
+     - playlists (renderPlaylists) et people-favorites (renderPeopleFavorites,
+       ajoutee en v1.20 - acteurs/realisateurs favoris, route #/people) :
+       les 2 SEULES vues ou .media-list est pose en enfant DIRECT de .page
+       (reverifie par grep sur les 5 usages de .media-list dans views.js :
+       watchlist/playlist/library sont dans un holder intermediaire, seuls
+       renderPlaylists et renderPeopleFavorites appellent
+       page.appendChild(list) directement). Sans cap, .page (plus de
+       max-width sur grand ecran) laisse .media-list (720px, aligne a
+       gauche par defaut) colle au bord gauche au lieu d'etre centre avec
+       le reste des pages locales. Le selecteur ".page:has(> .media-list)"
+       ci-dessous est deja generique : il couvre les deux vues sans
+       modification.
      - profil (renderProfile) : marqueur .stats-grid enfant DIRECT de .page
        (sur /stats, .stats-grid est imbriquee dans .stats-page -> jamais
        enfant direct de .page, pas de collision entre les deux vues).
@@ -389,14 +431,15 @@
   /* Au tout premier lancement (acces TMDB non configure), app.js ne
      demarre pas le routing tant que l'onboarding tourne, mais buildDeskbar()
      a deja construit le header -> liens de nav morts (routing inactif).
-     body.onboarding-on est deja posee par onboarding.js (js/onboarding.js:28)
-     et masque la tabbar mobile (app.css ~1675) ; on masque le deskbar de la
+     body.onboarding-on est deja posee par onboarding.js (js/onboarding.js:32)
+     et masque la tabbar mobile (app.css ~2088) ; on masque le deskbar de la
      meme facon le temps de l'onboarding. */
   body.onboarding-on #deskbar { display: none; }
 
   /* ---- Overlays (sheets, toasts) et finitions ----
-     Verifie contre les regles mobiles dans css/app.css avant de surcharger :
-     - .sheet (app.css ~1374) : position fixed, left/right/bottom 0 (panneau
+     Reverifie contre les regles mobiles dans css/app.css avant de
+     surcharger (numeros de ligne mis a jour, decales par le rebase v1.20) :
+     - .sheet (app.css ~1781) : position fixed, left/right/bottom 0 (panneau
        colle en bas), border-radius arrondi seulement en haut, padding avec
        calc(var(--safe-bottom) + 20px), animation sheet-in qui part de
        translateY(100%). Pour un modal centre desktop, `inset` (shorthand
@@ -406,12 +449,12 @@
        avant de s'arreter a translate(-50%,-50%), incoherent). --safe-bottom
        vaut env(safe-area-inset-bottom, 0px) = 0px sur desktop (pas d'encoche
        a compenser) : le padding-bottom mobile reste donc inoffensif ici.
-     - .grab (app.css ~1390) : poignee de glissement, utile seulement quand
+     - .grab (app.css ~1797) : poignee de glissement, utile seulement quand
        le panneau part du bas -> masquee, sans utilite sur un modal centre.
-     - .sheet-veil (app.css ~1364) : deja position fixed + inset 0 (couvre
+     - .sheet-veil (app.css ~1771) : deja position fixed + inset 0 (couvre
        tout l'ecran), seule la couleur de fond est assombrie ici pour mieux
        detacher le modal centre du contenu.
-     - #toast-root (app.css ~1454) : position fixed, left/right 0, bottom
+     - #toast-root (app.css ~1861) : position fixed, left/right 0, bottom
        calc(tabbar-h + safe-bottom + 14px) (au-dessus de la tabbar mobile,
        deja masquee en desktop mais la variable --tabbar-h reste definie ->
        sans cette surcharge le conteneur flotterait a ~74px du bas sans
@@ -419,16 +462,18 @@
        mobile). Passe en bas a droite : left: auto + right/bottom fixes,
        et align-items: flex-end pour que les toasts plus courts s'alignent
        sur le bord droit plutot que d'etre centres dans le conteneur.
-     - .toast (app.css ~1470) : animation toast-in (fondu + translateY(8px))
+     - .toast (app.css ~1877) : animation toast-in (fondu + translateY(8px))
        inchangee, fonctionne identiquement quelle que soit la position du
        conteneur parent -> pas de surcharge necessaire.
-     - :root[data-theme="light"] .toast (app.css ~48) : verifie, pas de
-       surcharge necessaire. Cette regle fixe deja color:#fff / background:
-       #2a2438 en dur (pas de var()), donc meme si l'utilisateur a choisi le
-       theme clair, le toast reste fonce avec texte blanc sur desktop comme
-       sur mobile -> aucune inversion de couleurs sur fond noir, rien a
-       corriger.
-     - .scrolltop (app.css ~1548) : position fixed, right 14px, bottom
+     - [data-mode="light"] .toast (deplacee dans css/themes.css ~553,
+       l'ancien selecteur ":root[data-theme='light']" n'existe plus) :
+       verifie, pas de surcharge necessaire. Cette regle fixe deja
+       color:#fff / background:#2a2438 en dur (pas de var()), donc meme
+       en mode clair (quel que soit le skin - y compris la variante
+       [data-skin="minimal"][data-mode="light"] .toast juste apres, ~554),
+       le toast reste fonce avec texte blanc sur desktop comme sur mobile
+       -> aucune inversion de couleurs sur fond noir, rien a corriger.
+     - .scrolltop (app.css ~1961) : position fixed, right 14px, bottom
        calc(tabbar-h + safe-bottom + 16px) (au-dessus de la tabbar mobile,
        meme remarque que #toast-root) ; transform: translateY(10px) au repos
        et .scrolltop.show { transform: none } pilotent uniquement l'anima-
