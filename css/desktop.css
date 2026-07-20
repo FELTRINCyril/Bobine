@@ -22,6 +22,12 @@
     --text-muted: #a3a3a3;
     --text-faint: #6b6b6b;
     --page-pad: 56px;
+    /* Theme clair : ces 3 tokens ne sont pas repris ci-dessus, donc le
+       theme clair (app.css ~33-45) les faisait fuiter sur desktop. On
+       recopie les valeurs du :root sombre (app.css ~14-18). */
+    --accent-soft: rgba(255, 61, 110, 0.14);
+    --seen: #3ddc97;
+    --seen-soft: rgba(61, 220, 151, 0.14);
   }
 
   body { font-size: 16px; }
@@ -78,6 +84,10 @@
 
   /* ---- Accueil : hero plein ecran large ---- */
   .page-home { padding-top: 0; }
+  /* Evite un layout shift : la regle mobile (app.css ~400) pose
+     min-height: 62vh sur ce slot avant que .cine-hero (78vh desktop,
+     ci-dessous) ne soit mesure. */
+  .cine-hero-slot { min-height: 78vh; }
   .cine-hero {
     height: 78vh;
     min-height: 520px;
@@ -193,7 +203,10 @@
   /* Bouton "Charger plus" (renderCatalog/renderBrowse) : garde sa largeur
      mais bornee, sinon un bouton pleine largeur sur un ecran large est
      disproportionne par rapport a la grille au-dessus. */
-  .loadmore-wrap { max-width: 720px; }
+  /* Sans ca, le bouton (largeur bornee ci-dessus mais toujours en
+     display:flex/block pleine largeur en mobile) reste colle a gauche
+     de .page au lieu d'etre centre sous la grille. */
+  .loadmore-wrap { max-width: 720px; margin-inline: auto; }
 
   /* ---- Page detail : hero backdrop pleine largeur ----
      Ajout hors bloc litteral du brief : la regle generique ".page
@@ -318,11 +331,17 @@
      plutot qu'un bloc interne garde le titre (.page-head, padding
      var(--page-pad)) et le contenu alignes sur le meme repere gauche : pas
      de centrage independant qui les desalignerait.
-     - watchlist (renderWatchlist), playlists (renderPlaylists), playlist
-       (renderPlaylist) : deja lisibles sans ajout ici. Leur contenu est soit
-       .grid (pleine largeur, deja gere tache 4 - exception volontaire, comme
-       les catalogues), soit .media-list (deja limite a 720px lignes 187-191,
-       taches 5/6). Rien a dupliquer.
+     - watchlist (renderWatchlist), playlist (renderPlaylist) : deja
+       lisibles sans ajout ici. Leur contenu est soit .grid (pleine largeur,
+       deja gere tache 4 - exception volontaire, comme les catalogues), soit
+       .media-list (deja limite a 720px lignes 187-191, taches 5/6) mais
+       dans un <div> holder intermediaire, jamais enfant direct de .page.
+     - playlists (renderPlaylists, views.js:1063) : SEULE vue ou .media-list
+       est pose en enfant DIRECT de .page (verifie par grep sur les 4 usages
+       de .media-list dans views.js : lignes 992, 1183, 1497 sont toutes
+       dans un holder). Sans cap, .page (plus de max-width sur grand ecran)
+       laisse .media-list (720px, aligne a gauche par defaut) colle au bord
+       gauche au lieu d'etre centre avec le reste des pages locales.
      - profil (renderProfile) : marqueur .stats-grid enfant DIRECT de .page
        (sur /stats, .stats-grid est imbriquee dans .stats-page -> jamais
        enfant direct de .page, pas de collision entre les deux vues).
@@ -342,7 +361,8 @@
   .page:has(> .stats-grid),
   .page:has(.stats-page),
   .page:has(> .settings-page),
-  .page:has(> .person-hero) {
+  .page:has(> .person-hero),
+  .page:has(> .media-list) {
     max-width: 1100px;
     margin-left: auto;
     margin-right: auto;
@@ -365,6 +385,14 @@
      <div class="page onboarding">, la classe .onb (mentionnee a titre
      d'exemple dans le brief) n'existe pas dans le code. */
   .onboarding { max-width: 640px; margin: 0 auto; }
+
+  /* Au tout premier lancement (acces TMDB non configure), app.js ne
+     demarre pas le routing tant que l'onboarding tourne, mais buildDeskbar()
+     a deja construit le header -> liens de nav morts (routing inactif).
+     body.onboarding-on est deja posee par onboarding.js (js/onboarding.js:28)
+     et masque la tabbar mobile (app.css ~1675) ; on masque le deskbar de la
+     meme facon le temps de l'onboarding. */
+  body.onboarding-on #deskbar { display: none; }
 
   /* ---- Overlays (sheets, toasts) et finitions ----
      Verifie contre les regles mobiles dans css/app.css avant de surcharger :
@@ -394,6 +422,12 @@
      - .toast (app.css ~1470) : animation toast-in (fondu + translateY(8px))
        inchangee, fonctionne identiquement quelle que soit la position du
        conteneur parent -> pas de surcharge necessaire.
+     - :root[data-theme="light"] .toast (app.css ~48) : verifie, pas de
+       surcharge necessaire. Cette regle fixe deja color:#fff / background:
+       #2a2438 en dur (pas de var()), donc meme si l'utilisateur a choisi le
+       theme clair, le toast reste fonce avec texte blanc sur desktop comme
+       sur mobile -> aucune inversion de couleurs sur fond noir, rien a
+       corriger.
      - .scrolltop (app.css ~1548) : position fixed, right 14px, bottom
        calc(tabbar-h + safe-bottom + 16px) (au-dessus de la tabbar mobile,
        meme remarque que #toast-root) ; transform: translateY(10px) au repos
