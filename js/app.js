@@ -12,6 +12,7 @@ import {
 import { isConfigured } from './config.js';
 import { renderOnboarding } from './onboarding.js';
 import { initSync } from './sync.js';
+import { buildDeskbar, syncDeskbar, enhanceShelves } from './deskbar.js';
 
 const TABS = [
   { hash: '#/home', label: 'Accueil', icon: 'home' },
@@ -67,6 +68,7 @@ function syncTabbar(hash) {
   document.querySelectorAll('.tab').forEach((t) => {
     t.classList.toggle('on', hash.startsWith(t.dataset.hash));
   });
+  syncDeskbar(hash);
 }
 
 // Position de scroll memorisee par onglet
@@ -287,6 +289,8 @@ async function boot() {
   const rotateMsg = document.querySelector('#rotate-lock p');
   if (rotateMsg) rotateMsg.innerHTML = `${tr('Bobine se regarde en portrait.')}<br>${tr('Remets ton telephone dans le bon sens !')}`;
   buildTabbar();
+  buildDeskbar();
+  enhanceShelves();
   bindQuickActions();
   bindEdgeSwipeBack();
   bindScrollUi();

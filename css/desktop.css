@@ -1,0 +1,77 @@
+/* ============================================================
+   Bobine - layout ordinateur (>= 1024px), style Afterdark.
+   TOUT ce fichier est dans une media query : en dessous de
+   1024px, rien ici ne s'applique -> mobile intact.
+   ============================================================ */
+
+/* #deskbar existe dans le DOM en mobile : on le neutralise
+   hors media query, c'est la seule regle globale du fichier. */
+#deskbar { display: none; }
+
+@media (min-width: 1024px) {
+
+  /* ---- Tokens : theme Afterdark, ecrase le theme mobile ---- */
+  :root, :root[data-theme="light"] {
+    --bg: #000;
+    --surface: #101010;
+    --surface-2: #1a1a1a;
+    --surface-3: #262626;
+    --line: rgba(255, 255, 255, 0.1);
+    --text: #fff;
+    --text-muted: #a3a3a3;
+    --text-faint: #6b6b6b;
+    --page-pad: 56px;
+  }
+
+  body { font-size: 16px; }
+
+  /* ---- Chrome mobile cache ---- */
+  .tabbar, .float-search { display: none !important; }
+  .view { padding-bottom: 48px; }
+
+  /* ---- Header desktop ---- */
+  #deskbar {
+    display: block;
+    position: fixed;
+    inset: 0 0 auto 0;
+    z-index: 60;
+    background: linear-gradient(rgba(0, 0, 0, 0.6), transparent);
+    transition: background 0.25s;
+  }
+  #deskbar.scrolled { background: #000; border-bottom: 1px solid var(--line); }
+  .deskbar-in {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 68px;
+    padding: 0 var(--page-pad);
+  }
+  .deskbar-left { display: flex; align-items: center; gap: 36px; }
+  .dlogo {
+    font-family: var(--font-display);
+    font-size: 26px;
+    font-weight: 800;
+    letter-spacing: 0.5px;
+    color: #fff;
+    text-decoration: none;
+  }
+  .dlogo .tick { color: var(--accent); }
+  .dnav { display: flex; gap: 26px; }
+  .dnav a {
+    color: #cfcfcf;
+    text-decoration: none;
+    font-size: 15px;
+    font-weight: 600;
+    transition: color 0.15s;
+  }
+  .dnav a:hover { color: #fff; }
+  .dnav a.on { color: #fff; }
+  .deskbar-right { display: flex; align-items: center; gap: 20px; }
+  .dicon { color: #fff; display: grid; place-items: center; }
+  .dicon svg { width: 24px; height: 24px; }
+  .dicon.on { color: var(--accent); }
+
+  /* ---- Pages : contenu decale sous le header fixe ---- */
+  .page { padding-top: 84px; max-width: none; }
+  .page-head { padding: 0 var(--page-pad) 8px; }
+}
