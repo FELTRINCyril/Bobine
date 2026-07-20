@@ -365,4 +365,65 @@
      <div class="page onboarding">, la classe .onb (mentionnee a titre
      d'exemple dans le brief) n'existe pas dans le code. */
   .onboarding { max-width: 640px; margin: 0 auto; }
+
+  /* ---- Overlays (sheets, toasts) et finitions ----
+     Verifie contre les regles mobiles dans css/app.css avant de surcharger :
+     - .sheet (app.css ~1374) : position fixed, left/right/bottom 0 (panneau
+       colle en bas), border-radius arrondi seulement en haut, padding avec
+       calc(var(--safe-bottom) + 20px), animation sheet-in qui part de
+       translateY(100%). Pour un modal centre desktop, `inset` (shorthand
+       top/right/bottom/left) ecrase entierement le positionnement bas-plein-
+       largeur mobile, et `animation: none` neutralise le slide-in vertical
+       (sinon le modal centre glisserait quand meme depuis translateY(100%)
+       avant de s'arreter a translate(-50%,-50%), incoherent). --safe-bottom
+       vaut env(safe-area-inset-bottom, 0px) = 0px sur desktop (pas d'encoche
+       a compenser) : le padding-bottom mobile reste donc inoffensif ici.
+     - .grab (app.css ~1390) : poignee de glissement, utile seulement quand
+       le panneau part du bas -> masquee, sans utilite sur un modal centre.
+     - .sheet-veil (app.css ~1364) : deja position fixed + inset 0 (couvre
+       tout l'ecran), seule la couleur de fond est assombrie ici pour mieux
+       detacher le modal centre du contenu.
+     - #toast-root (app.css ~1454) : position fixed, left/right 0, bottom
+       calc(tabbar-h + safe-bottom + 14px) (au-dessus de la tabbar mobile,
+       deja masquee en desktop mais la variable --tabbar-h reste definie ->
+       sans cette surcharge le conteneur flotterait a ~74px du bas sans
+       raison), align-items: center (centre les toasts sous la tabbar
+       mobile). Passe en bas a droite : left: auto + right/bottom fixes,
+       et align-items: flex-end pour que les toasts plus courts s'alignent
+       sur le bord droit plutot que d'etre centres dans le conteneur.
+     - .toast (app.css ~1470) : animation toast-in (fondu + translateY(8px))
+       inchangee, fonctionne identiquement quelle que soit la position du
+       conteneur parent -> pas de surcharge necessaire.
+     - .scrolltop (app.css ~1548) : position fixed, right 14px, bottom
+       calc(tabbar-h + safe-bottom + 16px) (au-dessus de la tabbar mobile,
+       meme remarque que #toast-root) ; transform: translateY(10px) au repos
+       et .scrolltop.show { transform: none } pilotent uniquement l'anima-
+       tion d'apparition (verticale), independante de la position -> gardees
+       telles quelles.
+     Reserve documentee (deviation du brief) : le brief place #toast-root et
+     .scrolltop au meme coin (right/bottom 24px), ce qui les superposerait
+     si un toast apparait pendant que le bouton "remonter" est visible (les
+     deux peuvent coexister : action + defilement). Le bouton retour en haut
+     reste au coin exact bas-droite (repere fixe, familier) ; les toasts sont
+     decales a gauche de sa largeur (bouton 42px + 24px de marge) pour ne
+     jamais le recouvrir. */
+  .sheet {
+    inset: 50% auto auto 50%;
+    transform: translate(-50%, -50%);
+    width: 480px;
+    max-height: 80vh;
+    border-radius: var(--radius);
+    animation: none;
+  }
+  .sheet .grab { display: none; }
+  .sheet-veil { background: rgba(0, 0, 0, 0.7); }
+
+  #toast-root {
+    left: auto;
+    right: 90px;
+    bottom: 24px;
+    align-items: flex-end;
+  }
+
+  .scrolltop { right: 24px; bottom: 24px; }
 }
