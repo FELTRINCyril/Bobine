@@ -137,8 +137,11 @@
   .card .card-quick { opacity: 0; transition: opacity 0.15s; }
   .card:hover .card-quick, .card .card-quick.on { opacity: 1; }
 
-  /* ---- Fleches de shelves ---- */
-  .hscroll { position: relative; }
+  /* ---- Fleches de shelves ----
+     .shelf-wrap enveloppe .hscroll (le vrai conteneur scrollable) : les
+     fleches sont enfants du wrapper, donc hors du flux qui defile, et
+     restent epinglees a l'ecran pendant le scroll horizontal. */
+  .shelf-wrap { position: relative; }
   .shelf-arrow {
     position: absolute;
     top: 0;
@@ -157,7 +160,7 @@
   .shelf-arrow svg { width: 30px; height: 30px; }
   .shelf-arrow.prev { left: 0; }
   .shelf-arrow.next { right: 0; background: linear-gradient(to left, rgba(0, 0, 0, 0.75), transparent); }
-  .hscroll:hover .shelf-arrow { opacity: 1; }
-  .hscroll.at-start .shelf-arrow.prev,
-  .hscroll.at-end .shelf-arrow.next { opacity: 0; pointer-events: none; }
+  .shelf-wrap:hover .shelf-arrow { opacity: 1; }
+  .shelf-wrap.at-start .shelf-arrow.prev,
+  .shelf-wrap.at-end .shelf-arrow.next { opacity: 0; pointer-events: none; }
 }

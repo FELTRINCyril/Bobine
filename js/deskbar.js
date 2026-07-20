@@ -45,39 +45,58 @@ export function syncDeskbar(hash) {
 
 // Fleches de defilement des rangees horizontales, desktop uniquement.
 // Un MutationObserver equipe chaque .hscroll rendu par les vues ; les
-// boutons sont ignores en mobile (media query + pointer fine).
+// boutons restent inertes en mobile grace a DESK.matches (scan() ne
+// s'execute pas sous 1024px) et a la garde CSS de desktop.css qui
+// force ".shelf-arrow { display: none; }" hors media query.
 const DESK = window.matchMedia('(min-width: 1024px)');
 
 function equipShelf(shelf) {
   if (shelf.dataset.arrows) return;
   shelf.dataset.arrows = '1';
+  // .hscroll est le conteneur reellement scrollable (overflow-x: auto,
+  // voir css/app.css) ; .hscroll-inner ne fait que porter le contenu en
+  // largeur "max-content" et n'a pas d'overflow : tous les calculs et le
+  // scrollBy doivent donc porter sur shelf, pas sur inner.
   const inner = shelf.querySelector('.hscroll-inner');
   if (!inner) return;
+
+  // Les fleches doivent rester epinglees a l'ecran et ne pas defiler avec
+  // le contenu : on les sort du conteneur de scroll en enveloppant .hscroll
+  // dans un wrapper neutre, appende APRES la pose de data-arrows (ci-dessus)
+  // pour que le MutationObserver du scan() ne se re-declenche pas en boucle.
+  const wrap = h('<div class="shelf-wrap"></div>');
+  shelf.parentNode.insertBefore(wrap, shelf);
+  wrap.appendChild(shelf);
+
   const mk = (dir, icon) => {
     const b = h(`<button class="shelf-arrow ${dir}" type="button" aria-label="${dir === 'prev' ? tr('Precedent') : tr('Suivant')}">${icon}</button>`);
     b.addEventListener('click', () => {
-      inner.scrollBy({ left: (dir === 'prev' ? -1 : 1) * inner.clientWidth * 0.9, behavior: 'smooth' });
+      shelf.scrollBy({ left: (dir === 'prev' ? -1 : 1) * shelf.clientWidth * 0.9, behavior: 'smooth' });
     });
     return b;
   };
-  shelf.append(mk('prev', I.back), mk('next', I.chevRight));
+  wrap.append(mk('prev', I.back), mk('next', I.chevRight));
 
   const refresh = () => {
-    const max = inner.scrollWidth - inner.clientWidth - 4;
-    shelf.classList.toggle('at-start', inner.scrollLeft <= 4);
-    shelf.classList.toggle('at-end', inner.scrollLeft >= max);
+    const max = shelf.scrollWidth - shelf.clientWidth - 4;
+    wrap.classList.toggle('at-start', shelf.scrollLeft <= 4);
+    wrap.classList.toggle('at-end', shelf.scrollLeft >= max);
   };
-  inner.addEventListener('scroll', refresh, { passive: true });
+  shelf.addEventListener('scroll', refresh, { passive: true });
   refresh();
 }
 
 export function enhanceShelves() {
-  if (!DESK.matches && !DESK.addEventListener) return;
+  const view = document.getElementById('view');
+  if (!view) return;
+  // scan() se garde elle-meme via DESK.matches : on installe l'observer et
+  // le listener de resize inconditionnellement, pour equiper les shelves
+  // des qu'on repasse en desktop (pas seulement au chargement initial).
   const scan = () => {
     if (!DESK.matches) return;
     document.querySelectorAll('#view .hscroll').forEach(equipShelf);
   };
-  new MutationObserver(scan).observe(document.getElementById('view'), { childList: true, subtree: true });
+  new MutationObserver(scan).observe(view, { childList: true, subtree: true });
   DESK.addEventListener('change', scan);
   scan();
 }
