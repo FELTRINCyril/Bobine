@@ -587,7 +587,7 @@
 .theme-card-name { font-size: 13px; font-weight: 700; display: block; }
 .theme-card-desc { font-size: 11px; color: var(--text-muted); display: block; margin-top: 2px; }
 
-.theme-grid--sheet { max-height: 50vh; overflow-y: auto; margin-top: 8px; }
+.theme-grid--sheet { max-height: 50dvh; overflow-y: auto; margin-top: 8px; }
 .theme-picker-sheet h3 { margin: 0 0 4px; font-size: 17px; }
 .theme-picker-mode-lbl {
   font-size: 12px;

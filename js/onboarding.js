@@ -40,7 +40,11 @@ export function renderOnboarding(onDone) {
     </div>
   `));
 
-  const status = h('<p class="onb-status" role="status"></p>');
+  // Le statut etait ajoute en fin de page : un echec de connexion cloud
+  // s'affichait plusieurs centaines de pixels sous la zone visible, donc
+  // jamais lu. Il est desormais pose juste sous l'intro, au-dessus des
+  // boutons qui peuvent echouer.
+  const status = h('<p class="onb-status" role="status" aria-live="polite"></p>');
   const setStatus = (msg, ok = false) => {
     status.textContent = msg;
     status.classList.toggle('err', !!msg && !ok);
@@ -69,6 +73,8 @@ export function renderOnboarding(onDone) {
     }
   }
 
+  page.appendChild(status);
+
   // ---- Synchro cloud (recuperer des donnees existantes) ----
   const cloudBox = h('<div class="onb-cloud"></div>');
   cloudBox.appendChild(h(`<h2 class="onb-cloud-title">${tr('Deja des donnees sur le cloud ?')}</h2>`));
@@ -94,7 +100,7 @@ export function renderOnboarding(onDone) {
       });
       busy(btn, false);
       if (r === null) return;
-      if (r === undefined) { setStatus(tr('Connexion annulee')); return; }
+      if (r === undefined) { setStatus(tr('Connexion au cloud impossible. Reessaie, ou configure une cle TMDB ci-dessous.')); return; }
       if (providerId === 'dropbox') return;
       if (r.langChanged) { location.reload(); return; }
       if (isConfigured()) {
@@ -172,5 +178,4 @@ export function renderOnboarding(onDone) {
   details.appendChild(proxyCard);
 
   page.appendChild(details);
-  page.appendChild(status);
 }

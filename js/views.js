@@ -1,5 +1,5 @@
 // Vues / pages de l'app
-import { api, img, isAnime, getLang, setLang, clearApiCache } from './api.js';
+import { api, img, isAnime, getLang, setLang, clearApiCache, isAuthError } from './api.js';
 import { tr, isEn } from './i18n.js';
 import { APP_VERSION } from './version.js';
 import {
@@ -12,7 +12,7 @@ import {
 import { findUniverse, sortByMcuChrono, MCU_CHRONO } from './universes.js';
 import { getConfig, resetConfig, getMetadataMode, setMetadataMode } from './config.js';
 import { SKINS, getSkin, getMode, getSkinInfo, openThemePicker } from './themes.js';
-import { openConfirmSheet } from './confirm.js';
+import { openConfirmSheet, openAskSheet } from './confirm.js';
 import { bindInfiniteScroll } from './scrollLoad.js';
 import { disconnect, syncNow, syncStatus, resetAllData } from './sync.js';
 import { hasSync } from './storage/index.js';
@@ -25,9 +25,19 @@ import {
   toggleFavorite, toggleAdd, setMoviePlays, setEpisodePlays,
   markSeason, updateItemTotals, openPlaylistSheet,
   cacheEpisodeRuntimes, syncTvRuntimes,
+  episodesUnder, levelUpEpisodes,
 } from './actions.js';
 
 const $view = () => document.getElementById('view');
+
+// Etat d'erreur d'un chargement TMDB. Une cle refusee affichait "Hors ligne",
+// ce qui envoyait chercher un probleme de reseau alors qu'il faut reconfigurer
+// l'acces : on distingue les deux.
+function apiErrorState(e, icon = 'film') {
+  return isAuthError(e)
+    ? emptyState(icon, tr('Acces TMDB refuse'), tr('Ta cle TMDB est invalide ou revoquee. Reconfigure-la dans Parametres.'))
+    : emptyState(icon, tr('Hors ligne'), tr('Impossible de charger TMDB.'));
+}
 
 const CREW_DEPARTMENTS = [
   { key: 'Directing', label: 'Realisation', jobs: ['Director', 'Co-Director'] },
@@ -140,9 +150,9 @@ function homeFetchSection(body, title, fetcher, type, listingId, { lazy = false 
         holder.innerHTML = '';
         holder.appendChild(hRow(results.slice(0, 10), type));
       })
-      .catch(() => {
+      .catch((e) => {
         holder.innerHTML = '';
-        holder.appendChild(emptyState('film', tr('Hors ligne'), tr('Impossible de charger TMDB.')));
+        holder.appendChild(apiErrorState(e));
       });
   };
 
@@ -620,10 +630,10 @@ export async function renderCatalog(name) {
       loadStatus.style.display = hasMore ? '' : 'none';
       if (!hasMore) unbindScroll?.();
       pageNum++;
-    } catch {
+    } catch (e) {
       if (!grid.children.length) {
         grid.classList.add('grid--empty');
-        grid.appendChild(emptyState('film', tr('Hors ligne'), tr('Impossible de charger TMDB.')));
+        grid.appendChild(apiErrorState(e));
       }
       hasMore = false;
       loadStatus.style.display = 'none';
@@ -704,9 +714,17 @@ export async function renderDetail(type, id) {
   bindBack(page);
 
   const year = mediaYear(d);
+  // TMDB denormalise `number_of_episodes` et il diverge souvent de la somme
+  // reelle des saisons (ex. 918 annonces pour 921 episodes listes). La barre de
+  // progression et le calcul "serie vue" se basent sur la somme des saisons :
+  // l'en-tete doit afficher la meme chose, sinon la fiche se contredit.
+  const seasonEpisodeSum = (d.seasons || [])
+    .filter((sn) => sn.season_number !== 0)
+    .reduce((n, sn) => n + (sn.episode_count || 0), 0);
+  const episodeTotal = seasonEpisodeSum || d.number_of_episodes || 0;
   const runtime = type === 'movie'
     ? (d.runtime ? `${Math.floor(d.runtime / 60)}h${String(d.runtime % 60).padStart(2, '0')}` : '')
-    : `${d.number_of_seasons} ${d.number_of_seasons > 1 ? tr('saisons') : tr('saison')} - ${d.number_of_episodes} ep.`;
+    : `${d.number_of_seasons} ${d.number_of_seasons > 1 ? tr('saisons') : tr('saison')} - ${episodeTotal} ep.`;
   const note = d.vote_average ? d.vote_average.toFixed(1) : null;
   const anilistScore = d._fusion?.merged?.scoreAnilist?.value;
   const poster = img(d.poster_path, 'w342');
@@ -1164,12 +1182,62 @@ function seasonBlock(meta, detail, s, onChange) {
       } catch { /* hors ligne */ }
       toast('Saison marquee vue');
     }
-    if (epList) {
-      body.querySelectorAll('.ep').forEach((el) => el.remove());
-      for (const ep of epList) body.appendChild(epRow(ep));
-    }
+    redrawEpisodes();
     refreshHead();
   });
+
+  // Re-rend les lignes d'episodes deja affichees (les outils de saison, poses
+  // avant elles, restent en place).
+  function redrawEpisodes() {
+    if (!epList) return;
+    body.querySelectorAll('.ep').forEach((el) => el.remove());
+    for (const ep of epList) body.appendChild(epRow(ep));
+  }
+
+  // Numeros d'episodes de la saison situes avant `epNumber`.
+  function episodesBefore(epNumber) {
+    return (epList || [])
+      .map((e) => e.episode_number)
+      .filter((n) => n < epNumber);
+  }
+
+  // Apres avoir pose un compteur sur un episode, propose de mettre les
+  // precedents au meme niveau (cf. levelUpEpisodes dans actions.js). Ne
+  // demande rien s'il n'y a aucun retard a rattraper.
+  async function offerCatchUp(epNumber, target) {
+    const behind = episodesUnder(it(), s.season_number, episodesBefore(epNumber), target);
+    if (!behind.length) return;
+
+    // Phrases completes (pas de concatenation) pour rester traduisibles.
+    const n = behind.length;
+    const fill = (str) => str.replace('{n}', n).replace('{p}', target);
+    const ask = target > 1
+      ? {
+        title: tr('Rattraper le revisionnage ?'),
+        message: fill(n > 1
+          ? tr('{n} episodes precedents sont encore en dessous. Les passer aussi a {p} visionnages ?')
+          : tr('1 episode precedent est encore en dessous. Le passer aussi a {p} visionnages ?')),
+        confirmLabel: fill(n > 1 ? tr('Mettre les {n} a jour') : tr('Mettre a jour')),
+      }
+      : {
+        title: tr('Marquer les precedents ?'),
+        message: fill(n > 1
+          ? tr('{n} episodes precedents de cette saison ne sont pas coches. Les marquer vus aussi ?')
+          : tr('1 episode precedent de cette saison n\'est pas coche. Le marquer vu aussi ?')),
+        confirmLabel: fill(n > 1 ? tr('Marquer les {n}') : tr('Marquer aussi')),
+      };
+
+    if (!(await openAskSheet(ask))) return;
+
+    const changed = await levelUpEpisodes(meta, s.season_number, behind, target);
+    updateItemTotals(meta, detail);
+    redrawEpisodes();
+    refreshHead();
+    toast((target > 1
+      ? (changed > 1 ? tr('{n} episodes mis a jour') : tr('1 episode mis a jour'))
+      : (changed > 1 ? tr('{n} episodes marques vus') : tr('1 episode marque vu'))
+    ).replace('{n}', changed));
+  }
 
   function epRow(ep) {
     const key = `${s.season_number}:${ep.episode_number}`;
@@ -1198,17 +1266,22 @@ function seasonBlock(meta, detail, s, onChange) {
     refresh();
 
     check.addEventListener('click', async () => {
-      await setEpisodePlays(meta, s.season_number, ep.episode_number, plays() > 0 ? 0 : 1);
+      const marking = plays() === 0;
+      await setEpisodePlays(meta, s.season_number, ep.episode_number, marking ? 1 : 0);
       if (ep.runtime) cacheEpisodeRuntimes(meta, s.season_number, [ep]);
       updateItemTotals(meta, detail);
       refresh();
       refreshHead();
+      // Uniquement en cochant : decocher un episode ne doit rien entrainer.
+      if (marking) await offerCatchUp(ep.episode_number, 1);
     });
     playsBtn.addEventListener('click', async () => {
-      await setEpisodePlays(meta, s.season_number, ep.episode_number, plays() + 1);
+      const target = plays() + 1;
+      await setEpisodePlays(meta, s.season_number, ep.episode_number, target);
       if (ep.runtime) cacheEpisodeRuntimes(meta, s.season_number, [ep]);
       refresh();
       refreshHead();
+      await offerCatchUp(ep.episode_number, target);
     });
     return row;
   }
@@ -1240,8 +1313,7 @@ function seasonBlock(meta, detail, s, onChange) {
     const [allBtn, reBtn, noneBtn] = tools.querySelectorAll('button');
     const nums = () => epList.map((e) => e.episode_number);
     const redraw = () => {
-      body.querySelectorAll('.ep').forEach((e) => e.remove());
-      for (const ep of epList) body.appendChild(epRow(ep));
+      redrawEpisodes();
       refreshHead();
     };
     allBtn.addEventListener('click', async () => { await markSeason(meta, s.season_number, nums(), 'all'); updateItemTotals(meta, detail); redraw(); toast('Saison marquee vue'); });
@@ -1724,9 +1796,9 @@ export function renderSearch() {
       const data = await api.search(q.trim());
       if (my !== seq) return;
       draw(data.results);
-    } catch {
+    } catch (e) {
       results.innerHTML = '';
-      results.appendChild(emptyState('search', tr('Hors ligne'), tr("La recherche a besoin d'une connexion.")));
+      results.appendChild(apiErrorState(e, 'search'));
     }
   }
 
@@ -1788,7 +1860,7 @@ export async function renderStats() {
       <div class="stats-breakdown">
         <div class="stats-row"><span>${tr('Films')}</span><strong>${formatDuration(s.movieMinutes)}</strong></div>
         <div class="stats-row"><span>${tr('Series')}</span><strong>${formatDuration(s.tvMinutes)}</strong></div>
-        <div class="stats-row"><span>${tr('Animes')}</span><strong>${formatDuration(s.animeMinutes)}</strong></div>
+        <div class="stats-row stats-row--sub"><span>${tr('dont animes')}</span><strong>${formatDuration(s.animeMinutes)}</strong></div>
       </div>
       <div class="stats-grid stats-grid--detail">
         <div class="stat"><div class="v">${s.moviesSeen.length}</div><div class="l">${tr('Films vus')}</div></div>
@@ -2127,11 +2199,37 @@ export function renderSettings() {
   if (hasSync()) {
     const { provider } = syncStatus();
     box.appendChild(h(`<p class="settings-note">${tr('Connecte :')} ${providerLabel[provider] || provider}</p>`));
+
+    // Etat reel de la synchro : sans ca, une synchro morte depuis des jours
+    // reste invisible et on continue a saisir dans le vide.
+    const health = h('<div class="sync-health"></div>');
+    const renderHealth = () => {
+      const { lastSync, lastError } = syncStatus();
+      health.innerHTML = '';
+      health.classList.toggle('sync-health--err', !!lastError);
+      const when = lastSync
+        ? new Date(lastSync).toLocaleString(isEn() ? 'en-GB' : 'fr-FR',
+          { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+        : tr('jamais');
+      health.appendChild(h(`<p class="sync-health-line">${tr('Derniere synchro reussie :')} <b>${esc(when)}</b></p>`));
+      if (lastError) {
+        health.appendChild(h(`<p class="sync-health-line sync-health-msg">${tr('La derniere tentative a echoue. Tes modifications recentes ne sont pas sauvegardees sur le cloud.')}</p>`));
+        if (provider === 'gdrive') {
+          health.appendChild(h(`<p class="sync-health-line sync-health-msg">${tr('Google Drive demande de se reconnecter regulierement. Utilise le bouton ci-dessous.')}</p>`));
+        }
+      }
+    };
+    renderHealth();
+    box.appendChild(health);
+
     const syncBtn = h(`<button class="set-row">${I.refresh}<span>${tr('Synchroniser maintenant')}</span><span class="chev">${I.chevRight}</span></button>`);
     syncBtn.addEventListener('click', async () => {
+      syncBtn.disabled = true;
       toast(tr('Synchronisation...'));
-      await syncNow();
-      toast(tr('Synchronise'));
+      const r = await syncNow();
+      syncBtn.disabled = false;
+      renderHealth();
+      toast(r.ok ? tr('Synchronise') : tr('Echec de la synchro. Reconnecte-toi au cloud.'));
     });
     const offBtn = h(`<button class="set-row">${I.globe}<span>${tr('Se deconnecter du cloud')}</span><span class="chev">${I.chevRight}</span></button>`);
     offBtn.addEventListener('click', async () => {
@@ -2259,10 +2357,10 @@ export async function renderBrowse(mediaType, genreId) {
       }
       moreWrap.style.display = pageNum >= data.total_pages ? 'none' : '';
       pageNum++;
-    } catch {
+    } catch (e) {
       if (!grid.children.length) {
         grid.classList.add('grid--empty');
-        grid.appendChild(emptyState('film', tr('Hors ligne'), tr('Impossible de charger TMDB.')));
+        grid.appendChild(apiErrorState(e));
       }
       moreWrap.style.display = 'none';
     }
@@ -2707,9 +2805,9 @@ async function runAdvanced(f, titleEl, grid) {
       scored.sort((a, b) => b.kwScore - a.kwScore || a.order - b.order);
       results = scored.map((x) => x.m);
     }
-  } catch {
+  } catch (e) {
     grid.innerHTML = '';
-    titleEl.textContent = tr('Hors ligne');
+    titleEl.textContent = isAuthError(e) ? tr('Acces TMDB refuse') : tr('Hors ligne');
     return;
   }
 

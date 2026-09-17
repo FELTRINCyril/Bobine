@@ -105,8 +105,11 @@ export function posterCard(media, opts = {}) {
   }
 
   const src = img(posterPath, 'w342');
+  // onload pose la classe qui coupe le voile de chargement (css/app.css).
+  // Sans ca l'animation tournerait indefiniment sous chaque affiche, y compris
+  // une fois l'image affichee - cout inutile sur une grille de 40 cartes.
   const imgHtml = src
-    ? `<img src="${src}" alt="" loading="lazy">`
+    ? `<img src="${src}" alt="" loading="lazy" onload="this.parentNode.classList.add('is-loaded')" onerror="this.parentNode.classList.add('is-loaded')">`
     : `<span class="no-img">${esc(title)}</span>`;
 
   const sub = opts.sub !== undefined ? opts.sub : mediaYear(media) || media.year || '';

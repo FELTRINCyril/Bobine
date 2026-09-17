@@ -34,3 +34,24 @@ export function openConfirmSheet({ title, message, confirmLabel, danger = false 
     });
   });
 }
+
+// Question simple (oui / non), sans case a cocher : pour les propositions
+// courantes et reversibles, la ou openConfirmSheet serait trop lourd.
+// Retourne true si l'utilisateur accepte.
+export function openAskSheet({ title, message, confirmLabel, cancelLabel }) {
+  const body = h(`
+    <div class="confirm-sheet">
+      <h3>${esc(title)}</h3>
+      <p class="confirm-msg">${esc(message)}</p>
+      <div class="reset-actions">
+        <button class="btn ghost ask-cancel">${esc(cancelLabel || tr('Non merci'))}</button>
+        <button class="btn ask-go">${esc(confirmLabel)}</button>
+      </div>
+    </div>
+  `);
+  const close = openSheet(body);
+  return new Promise((resolve) => {
+    body.querySelector('.ask-cancel').addEventListener('click', () => { close(); resolve(false); });
+    body.querySelector('.ask-go').addEventListener('click', () => { close(); resolve(true); });
+  });
+}

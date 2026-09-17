@@ -286,6 +286,10 @@ async function boot() {
   // Copie de secours locale saturee (quota) : on previent une seule fois.
   window.addEventListener('bobine:backup-degraded',
     () => toast(tr('Sauvegarde locale saturee : pense a exporter.')), { once: true });
+  // Synchro cloud tombee : l'utilisateur doit l'apprendre tout de suite, pas
+  // le jour ou il constate que ses ajouts ne sont nulle part.
+  window.addEventListener('bobine:sync-error',
+    () => toast(tr('Synchro cloud interrompue : va dans Parametres pour te reconnecter.')), { once: true });
   const rotateMsg = document.querySelector('#rotate-lock p');
   if (rotateMsg) rotateMsg.innerHTML = `${tr('Bobine se regarde en portrait.')}<br>${tr('Remets ton telephone dans le bon sens !')}`;
   buildTabbar();
@@ -317,7 +321,7 @@ async function boot() {
   }
 
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js?v=1.20').then((reg) => {
+    navigator.serviceWorker.register('sw.js?v=1.21').then((reg) => {
       reg.update().catch(() => {});
       const onReload = () => {
         navigator.serviceWorker.addEventListener('controllerchange', () => location.reload(), { once: true });

@@ -348,6 +348,42 @@ const EN = {
   'Synchronise tes donnees pour les retrouver sur un autre appareil et survivre a une desinstallation. Google Drive arrive bientot.': 'Sync your data to find it on another device and survive an uninstall. Google Drive coming soon.',
   "La synchro cloud necessite HTTPS (ou localhost). Deploie l'app pour l'utiliser sur mobile.": 'Cloud sync requires HTTPS (or localhost). Deploy the app to use it on mobile.',
 
+  // Rattrapage des episodes precedents
+  'Marquer les precedents ?': 'Mark previous ones?',
+  '{n} episodes precedents de cette saison ne sont pas coches. Les marquer vus aussi ?':
+    '{n} earlier episodes in this season are unchecked. Mark them watched too?',
+  "1 episode precedent de cette saison n'est pas coche. Le marquer vu aussi ?":
+    '1 earlier episode in this season is unchecked. Mark it watched too?',
+  'Marquer les {n}': 'Mark all {n}',
+  'Marquer aussi': 'Mark it too',
+  'Rattraper le revisionnage ?': 'Catch up the rewatch?',
+  '{n} episodes precedents sont encore en dessous. Les passer aussi a {p} visionnages ?':
+    '{n} earlier episodes are still behind. Bring them up to {p} plays too?',
+  '1 episode precedent est encore en dessous. Le passer aussi a {p} visionnages ?':
+    '1 earlier episode is still behind. Bring it up to {p} plays too?',
+  'Mettre les {n} a jour': 'Update all {n}',
+  'Mettre a jour': 'Update',
+  'Non merci': 'No thanks',
+  '{n} episodes marques vus': '{n} episodes marked watched',
+  '1 episode marque vu': '1 episode marked watched',
+  '{n} episodes mis a jour': '{n} episodes updated',
+  '1 episode mis a jour': '1 episode updated',
+
+  // Etat de la synchro et erreurs d'acces
+  'Acces TMDB refuse': 'TMDB access denied',
+  'Ta cle TMDB est invalide ou revoquee. Reconfigure-la dans Parametres.':
+    'Your TMDB key is invalid or revoked. Set it up again in Settings.',
+  'Derniere synchro reussie :': 'Last successful sync:',
+  'jamais': 'never',
+  'La derniere tentative a echoue. Tes modifications recentes ne sont pas sauvegardees sur le cloud.':
+    'The last attempt failed. Your recent changes are not saved to the cloud.',
+  'Google Drive demande de se reconnecter regulierement. Utilise le bouton ci-dessous.':
+    'Google Drive needs you to reconnect regularly. Use the button below.',
+  'Echec de la synchro. Reconnecte-toi au cloud.': 'Sync failed. Reconnect to the cloud.',
+  'Synchro cloud interrompue : va dans Parametres pour te reconnecter.':
+    'Cloud sync interrupted: go to Settings to reconnect.',
+  'dont animes': 'of which anime',
+
   // Divers
   'sur': 'of',
   'Remonter en haut': 'Back to top',

@@ -1,5 +1,5 @@
 // Service worker : app dispo hors ligne, cache des images TMDB
-const VERSION = 'bobine-v29';
+const VERSION = 'bobine-v30';
 const SHELL = [
   './',
   './index.html',
@@ -32,6 +32,12 @@ const SHELL = [
   './icons/icon-512.png',
 ];
 
+// L'app charge ses modules avec un suffixe de version ('./js/app.js?v=N').
+// caches.match compare l'URL complete, query comprise : un pre-cache sans le
+// suffixe ne repondait jamais (premier chargement hors ligne casse) et tout
+// finissait stocke deux fois. On interroge donc le cache en ignorant la query.
+const matchShell = (req) => caches.match(req, { ignoreSearch: true });
+
 self.addEventListener('install', (e) => {
   e.waitUntil(
     caches.open(VERSION).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting())
@@ -41,7 +47,7 @@ self.addEventListener('install', (e) => {
 self.addEventListener('activate', (e) => {
   e.waitUntil(
     caches.keys()
-      .then((keys) => Promise.all(keys.filter((k) => k !== VERSION && k !== 'tmdb-img').map((k) => caches.delete(k))))
+      .then((keys) => Promise.all(keys.filter((k) => k !== VERSION && k !== IMG_CACHE).map((k) => caches.delete(k))))
       .then(() => self.clients.claim())
   );
 });
@@ -50,17 +56,41 @@ self.addEventListener('message', (e) => {
   if (e.data?.type === 'SKIP_WAITING') self.skipWaiting();
 });
 
+// Le cache d'affiches n'avait aucune borne : chaque poster croise y restait a
+// vie. Sur iOS, saturer le quota de l'origine peut faire evincer TOUT le
+// stockage du site par Safari, IndexedDB comprise - donc les donnees de
+// visionnage. On plafonne, en evacuant les entrees les plus anciennes.
+const IMG_CACHE = 'tmdb-img';
+const IMG_MAX = 400;
+let trimming = false;
+
+async function trimImageCache(cache) {
+  if (trimming) return;
+  trimming = true;
+  try {
+    const keys = await cache.keys();
+    // keys() rend les entrees dans leur ordre d'insertion : les premieres
+    // sont les plus anciennes.
+    const excess = keys.length - IMG_MAX;
+    for (let i = 0; i < excess; i++) await cache.delete(keys[i]);
+  } catch { /* cache indisponible */ }
+  finally { trimming = false; }
+}
+
 self.addEventListener('fetch', (e) => {
   const url = new URL(e.request.url);
 
   // Images TMDB : cache d'abord (les affiches ne changent pas)
   if (url.hostname === 'image.tmdb.org') {
     e.respondWith(
-      caches.open('tmdb-img').then(async (c) => {
+      caches.open(IMG_CACHE).then(async (c) => {
         const hit = await c.match(e.request);
         if (hit) return hit;
         const res = await fetch(e.request);
-        if (res.ok) c.put(e.request, res.clone());
+        if (res.ok) {
+          await c.put(e.request, res.clone());
+          trimImageCache(c);
+        }
         return res;
       })
     );
@@ -86,11 +116,11 @@ self.addEventListener('fetch', (e) => {
             }
             return res;
           })
-          .catch(() => caches.match(e.request))
+          .catch(() => matchShell(e.request))
       );
       return;
     }
 
-    e.respondWith(caches.match(e.request).then((hit) => hit || fetch(e.request)));
+    e.respondWith(matchShell(e.request).then((hit) => hit || fetch(e.request)));
   }
 });

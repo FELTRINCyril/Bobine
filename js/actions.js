@@ -70,6 +70,40 @@ export async function setEpisodePlays(meta, season, episode, plays) {
   return it.episodes[key] || 0;
 }
 
+// ---- Rattrapage : completer les episodes precedents d'une saison ----
+// Un seul mecanisme couvre les trois cas d'usage : premier visionnage (on
+// coche le 56e, les 55 premiers suivent), reprise apres interruption (1-56
+// deja vus, on coche le 76e, 57-75 suivent) et revisionnage (saison deja vue,
+// on remet +1 sur le 40e, les 39 precedents passent aussi a 2). Dans tous les
+// cas on ne fait que remonter au niveau vise : un compteur deja superieur
+// n'est jamais abaisse.
+
+// Episodes de `epNumbers` dont le compteur de visionnages est sous `target`.
+export function episodesUnder(it, season, epNumbers, target) {
+  if (!it) return [...epNumbers];
+  return epNumbers.filter((n) => (it.episodes[`${season}:${n}`] || 0) < target);
+}
+
+// Aligne sur `target` les episodes indiques restes en dessous.
+// Retourne le nombre d'episodes reellement modifies.
+export async function levelUpEpisodes(meta, season, epNumbers, target) {
+  const it = ensureItem(meta);
+  if (!it.episodeRuntime) it.episodeRuntime = meta.episodeRuntime || 50;
+  let changed = 0;
+  for (const ep of epNumbers) {
+    const key = `${season}:${ep}`;
+    if ((it.episodes[key] || 0) < target) {
+      it.episodes[key] = target;
+      changed++;
+    }
+  }
+  if (changed) {
+    it.watchlist = true;
+    await saveItem(it);
+  }
+  return changed;
+}
+
 export async function markSeason(meta, season, episodeNumbers, mode) {
   const it = ensureItem(meta);
   if (!it.episodeRuntime) it.episodeRuntime = meta.episodeRuntime || 50;

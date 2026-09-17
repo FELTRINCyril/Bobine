@@ -118,9 +118,9 @@
   /* Evite un layout shift : la regle mobile (app.css ~382) pose
      min-height: 62vh sur ce slot avant que .cine-hero (78vh desktop,
      ci-dessous) ne soit mesure. */
-  .cine-hero-slot { min-height: 78vh; }
+  .cine-hero-slot { min-height: 78dvh; }
   .cine-hero {
-    height: 78vh;
+    height: 78dvh;
     min-height: 520px;
     display: flex;
     flex-direction: column;
@@ -249,7 +249,7 @@
      deskbar transparent. */
   .page:has(> .detail-hero) { padding-top: 0; }
 
-  .detail-hero { height: 62vh; min-height: 420px; }
+  .detail-hero { height: 62dvh; min-height: 420px; }
   .detail-hero .backdrop { width: 100%; height: 100%; object-fit: cover; }
   .detail-hero .shade {
     background:
@@ -502,7 +502,7 @@
     inset: 50% auto auto 50%;
     transform: translate(-50%, -50%);
     width: 480px;
-    max-height: 80vh;
+    max-height: 80dvh;
     border-radius: var(--radius);
     animation: none;
   }

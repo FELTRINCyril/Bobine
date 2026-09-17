@@ -16,8 +16,17 @@ function openDb() {
       if (!d.objectStoreNames.contains('playlists')) d.createObjectStore('playlists', { keyPath: 'id' });
       if (!d.objectStoreNames.contains('people')) d.createObjectStore('people', { keyPath: 'id' });
     };
-    req.onsuccess = () => resolve(req.result);
+    req.onsuccess = () => {
+      // Un autre onglet qui demande une version superieure attend que nos
+      // connexions se ferment : sans ca il resterait bloque indefiniment.
+      req.result.onversionchange = () => req.result.close();
+      resolve(req.result);
+    };
     req.onerror = () => reject(req.error);
+    // Une montee de version pendant qu'un autre onglet tient la base laissait
+    // la promesse pendante pour toujours, donc l'app figee au demarrage sans
+    // le moindre message.
+    req.onblocked = () => reject(new Error('IndexedDB bloquee par un autre onglet'));
   });
   return dbp;
 }
@@ -148,6 +157,75 @@ export async function replaceAll(items, playlists, people) {
   for (const pl of playlists || []) await idbPutSafe('playlists', pl);
   for (const p of people || []) await idbPutSafe('people', p);
   syncBackup();
+}
+
+// Fusionne un jeu de donnees distant dans l'etat local, sans rien effacer.
+// Remplace l'ancien "le cloud ecrase tout" qui faisait perdre les ajouts faits
+// pendant que la synchro etait muette (jeton expire, hors ligne...).
+//
+// Regles, par entree et non plus en bloc :
+//  - presente d'un seul cote  -> conservee telle quelle ;
+//  - presente des deux cotes  -> les champs simples viennent de la version au
+//    `updatedAt` le plus recent, et la carte `episodes` est fusionnee clef par
+//    clef en gardant le compteur le plus eleve.
+// Consequence assumee : un titre supprime sur un appareil peut revenir depuis
+// le cloud. Ressusciter une ligne est bien moins grave que perdre des heures
+// de visionnage, ce que faisait l'ancienne adoption.
+function mergeItem(local, remote) {
+  if (!local) return remote;
+  if (!remote) return local;
+  const newest = (remote.updatedAt || 0) > (local.updatedAt || 0) ? remote : local;
+  const older = newest === remote ? local : remote;
+  const merged = { ...older, ...newest };
+  // Visionnages : union des deux cotes, compteur le plus haut par episode.
+  const eps = { ...(older.episodes || {}) };
+  for (const [k, n] of Object.entries(newest.episodes || {})) {
+    eps[k] = Math.max(n || 0, eps[k] || 0);
+  }
+  merged.episodes = eps;
+  merged.plays = Math.max(local.plays || 0, remote.plays || 0);
+  merged.favorite = newest.favorite;
+  merged.watchlist = newest.watchlist;
+  merged.addedAt = Math.min(local.addedAt || Infinity, remote.addedAt || Infinity) || Date.now();
+  merged.updatedAt = Math.max(local.updatedAt || 0, remote.updatedAt || 0);
+  return merged;
+}
+
+export async function mergeAll(items, playlists, people) {
+  const changed = { items: 0, playlists: 0, people: 0 };
+
+  for (const remote of items || []) {
+    if (!remote?.id) continue;
+    const merged = mergeItem(state.items.get(remote.id), remote);
+    state.items.set(merged.id, merged);
+    await idbPutSafe('items', merged);
+    changed.items++;
+  }
+
+  for (const remote of playlists || []) {
+    if (!remote?.id) continue;
+    const local = state.playlists.get(remote.id);
+    // Pas d'historique par element dans une playlist : la version la plus
+    // recemment touchee gagne, la locale en cas d'egalite.
+    const keep = !local || (remote.updatedAt || remote.createdAt || 0) > (local.updatedAt || local.createdAt || 0)
+      ? remote : local;
+    state.playlists.set(keep.id, keep);
+    await idbPutSafe('playlists', keep);
+    changed.playlists++;
+  }
+
+  for (const remote of people || []) {
+    if (remote?.id == null) continue;
+    const id = Number(remote.id);
+    if (!state.people.has(id)) {
+      state.people.set(id, { ...remote, id });
+      await idbPutSafe('people', { ...remote, id });
+      changed.people++;
+    }
+  }
+
+  syncBackup();
+  return changed;
 }
 
 // Reinjecte dans l'etat (et IndexedDB) les entrees presentes dans le mirror
@@ -369,6 +447,7 @@ export function createPlaylist(name) {
     name: name.trim(),
     items: [],
     createdAt: Date.now(),
+    updatedAt: Date.now(),
   };
   state.playlists.set(pl.id, pl);
   idbPutSafe('playlists', pl);
@@ -378,6 +457,7 @@ export function createPlaylist(name) {
 }
 
 export async function savePlaylist(pl) {
+  pl.updatedAt = Date.now(); // necessaire a la fusion (voir mergeAll)
   await idbPutSafe('playlists', pl);
   touch();
   syncBackup();

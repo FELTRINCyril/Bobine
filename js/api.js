@@ -43,12 +43,21 @@ async function get(path, params = {}) {
     else url.searchParams.set('api_key', cfg.key);
   }
   const res = await fetch(url, { headers });
-  if (!res.ok) throw new Error(`TMDB ${res.status} sur ${path}`);
+  if (!res.ok) {
+    // On porte le code HTTP sur l'erreur : une cle refusee (401/403) n'a rien
+    // a voir avec une coupure reseau, et l'UI doit dire lequel des deux c'est.
+    const err = new Error(`TMDB ${res.status} sur ${path}`);
+    err.status = res.status;
+    throw err;
+  }
   const data = await res.json();
   cache.set(cacheKey, data);
   if (cache.size > CACHE_MAX) cache.delete(cache.keys().next().value);
   return data;
 }
+
+// Vrai quand TMDB a refuse l'acces (cle invalide, revoquee ou hors quota).
+export const isAuthError = (e) => e?.status === 401 || e?.status === 403;
 
 export const img = (path, size = 'w342') => (path ? `${IMG}${size}${path}` : null);
 

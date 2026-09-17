@@ -2,7 +2,7 @@
 // de l'etat complet en un "document" JSON, et son application inverse.
 // AUCUN secret dans le depot : seuls des jetons utilisateur (localStorage) et
 // des client_id publics (dans les adaptateurs) sont manipules. Voir PLAN-PHASE2.md.
-import { state, localStamp, replaceAll } from '../db.js';
+import { state, localStamp, replaceAll, mergeAll } from '../db.js';
 
 // Cles de config du stockage distant (localStorage)
 const K_PROVIDER = 'bobine_sync_provider'; // 'dropbox' | 'gdrive' | ''
@@ -60,9 +60,12 @@ export function buildSnapshot() {
   };
 }
 
-// Applique un document distant sur l'etat local (adoption "dernier ecrit
-// gagne"). Retourne { langChanged } pour que l'appelant recharge si besoin.
-export async function applySnapshot(doc) {
+// Applique un document distant sur l'etat local.
+// `mode` vaut 'merge' par defaut : rien n'est efface, chaque entree est
+// departagee individuellement (voir mergeAll dans db.js). 'replace' n'est
+// utilise que pour une restauration explicite demandee par l'utilisateur.
+// Retourne { langChanged } pour que l'appelant recharge si besoin.
+export async function applySnapshot(doc, { mode = 'merge' } = {}) {
   if (!doc || typeof doc !== 'object') return { langChanged: false };
   const prevLang = localStorage.getItem(K_LANG) || '';
 
@@ -92,7 +95,8 @@ export async function applySnapshot(doc) {
   }
 
   // Donnees
-  await replaceAll(doc.items, doc.playlists, doc.people);
+  if (mode === 'replace') await replaceAll(doc.items, doc.playlists, doc.people);
+  else await mergeAll(doc.items, doc.playlists, doc.people);
 
   return { langChanged: !!p.lang && p.lang !== prevLang };
 }

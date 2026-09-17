@@ -191,6 +191,39 @@ input, textarea {
 
 .poster img { width: 100%; height: 100%; object-fit: cover; }
 
+/* Les affiches arrivent en differe (loading=lazy + reseau mobile) : sans
+   indice visuel la grille reste une nappe de rectangles vides plusieurs
+   secondes. Le voile s'anime sous l'image et disparait des qu'elle couvre. */
+.poster::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(100deg,
+    var(--surface-2) 30%,
+    color-mix(in srgb, var(--surface-3) 70%, var(--surface-2)) 50%,
+    var(--surface-2) 70%);
+  background-size: 250% 100%;
+  animation: poster-shimmer 1.4s linear infinite;
+}
+
+@keyframes poster-shimmer {
+  from { background-position: 150% 0; }
+  to   { background-position: -50% 0; }
+}
+
+.poster img,
+.poster .no-img { position: relative; z-index: 1; }
+
+/* Image arrivee (ou en echec) : on arrete l'animation. */
+.poster.is-loaded::before { content: none; }
+
+/* Pas d'affiche a charger : pas de voile non plus. */
+.poster:has(.no-img)::before { content: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  .poster::before { animation: none; }
+}
+
 .poster .no-img {
   width: 100%;
   height: 100%;
@@ -220,6 +253,10 @@ input, textarea {
   overflow-wrap: anywhere;
   word-break: break-word;
   padding: 0 1px;
+  /* Hauteur reservee pour 2 lignes meme quand le titre n'en fait qu'une :
+     sans ca, l'annee remonte et les cartes d'une meme rangee ne s'alignent
+     plus. 2 lignes x 1.3 de hauteur de ligne. */
+  min-height: calc(2 * 1.3em);
 }
 
 .card-sub {
@@ -288,6 +325,19 @@ input, textarea {
 
 .card-quick svg { width: 14px; height: 14px; }
 
+/* Le bouton reste petit visuellement (il ne doit pas manger l'affiche) mais
+   sa zone tapable est portee a 44px, minimum utilisable au doigt : sous cette
+   taille un tap approximatif ouvrait la fiche au lieu d'ajouter le titre. */
+.card-quick::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 44px;
+  height: 44px;
+  transform: translate(-50%, -50%);
+}
+
 .card-quick:active { transform: scale(0.9); }
 
 .card-quick.on {
@@ -334,7 +384,7 @@ input, textarea {
   display: flex;
   justify-content: center;
   align-items: flex-start;
-  min-height: 44vh;
+  min-height: 44dvh;
   grid-template-columns: 1fr;
   padding-top: 48px;
 }
@@ -359,6 +409,27 @@ input, textarea {
 
 .chips::-webkit-scrollbar { display: none; }
 
+/* La rangee de filtres deborde souvent (jusqu'a ~575px de contenu pour 375px
+   visibles) sans que rien ne l'indique : le dernier filtre etait coupe net et
+   on ne devinait pas qu'il y en avait d'autres. Le masque cree un fondu au
+   bord droit, qui disparait une fois arrive au bout. */
+@media (max-width: 1023px) {
+  .chips {
+    -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent 100%);
+    mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent 100%);
+  }
+}
+
+.chips { scroll-snap-type: x proximity; }
+
+.chips > * { scroll-snap-align: start; }
+
+.chips-wrap,
+.adv-form .chips {
+  -webkit-mask-image: none;
+  mask-image: none;
+}
+
 .chip {
   flex: none;
   padding: 7px 14px;
@@ -379,11 +450,11 @@ input, textarea {
 
 .page-home { padding-top: 0; }
 
-.cine-hero-slot { min-height: 62vh; }
+.cine-hero-slot { min-height: 62dvh; }
 
 .cine-hero {
   position: relative;
-  min-height: 62vh;
+  min-height: 62dvh;
   display: flex;
   flex-direction: column;
   justify-content: flex-end;
@@ -1509,6 +1580,17 @@ a.stat:active { background: var(--surface-2); transform: scale(0.98); }
 
 .stats-row strong { color: var(--text); font-weight: 700; }
 
+/* Les animes sont un sous-ensemble des series, pas une troisieme categorie :
+   affichee au meme niveau, la ligne donnait l'impression d'un total faux
+   (Films + Series + Animes depassait le total affiche en haut). */
+.stats-row--sub {
+  padding-left: 18px;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.stats-row--sub strong { color: var(--text-muted); font-weight: 600; }
+
 .stats-grid--detail { padding: 0; }
 
 .settings-list { margin: 8px 18px; }
@@ -1532,6 +1614,32 @@ a.stat:active { background: var(--surface-2); transform: scale(0.98); }
 
 .settings-title--danger { color: var(--accent); }
 .settings-note--danger { color: var(--accent); opacity: 0.85; }
+
+/* Sante de la synchro : sans cet encart, une synchro morte depuis des jours
+   restait totalement invisible. */
+.sync-health {
+  margin: 4px 0 10px;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+}
+
+.sync-health-line {
+  font-size: 12.5px;
+  color: var(--text-muted);
+  line-height: 1.45;
+}
+
+.sync-health-line + .sync-health-line { margin-top: 5px; }
+.sync-health-line b { color: var(--text); font-weight: 600; }
+
+.sync-health--err {
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+  background: color-mix(in srgb, var(--accent) 10%, var(--surface-2));
+}
+
+.sync-health--err .sync-health-msg { color: var(--accent); }
 
 .reset-sheet h3 { margin: 0 0 12px; font-size: 17px; }
 .reset-warn {
