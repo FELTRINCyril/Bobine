@@ -191,15 +191,25 @@ function mergeItem(local, remote) {
   return merged;
 }
 
+// Signature legere d'un item, pour savoir si la fusion l'a reellement modifie
+// (l'appelant s'en sert pour ne redessiner l'ecran que si besoin).
+function itemSig(it) {
+  if (!it) return '';
+  const eps = Object.keys(it.episodes || {}).sort()
+    .map((k) => k + ':' + it.episodes[k]).join(',');
+  return `${it.plays || 0}|${it.favorite ? 1 : 0}|${it.watchlist ? 1 : 0}|${eps}`;
+}
+
 export async function mergeAll(items, playlists, people) {
-  const changed = { items: 0, playlists: 0, people: 0 };
+  let changed = 0;
 
   for (const remote of items || []) {
     if (!remote?.id) continue;
-    const merged = mergeItem(state.items.get(remote.id), remote);
+    const local = state.items.get(remote.id);
+    const merged = mergeItem(local, remote);
+    if (itemSig(local) !== itemSig(merged)) changed++;
     state.items.set(merged.id, merged);
     await idbPutSafe('items', merged);
-    changed.items++;
   }
 
   for (const remote of playlists || []) {
@@ -209,9 +219,9 @@ export async function mergeAll(items, playlists, people) {
     // recemment touchee gagne, la locale en cas d'egalite.
     const keep = !local || (remote.updatedAt || remote.createdAt || 0) > (local.updatedAt || local.createdAt || 0)
       ? remote : local;
+    if (keep !== local) changed++;
     state.playlists.set(keep.id, keep);
     await idbPutSafe('playlists', keep);
-    changed.playlists++;
   }
 
   for (const remote of people || []) {
@@ -220,7 +230,7 @@ export async function mergeAll(items, playlists, people) {
     if (!state.people.has(id)) {
       state.people.set(id, { ...remote, id });
       await idbPutSafe('people', { ...remote, id });
-      changed.people++;
+      changed++;
     }
   }
 

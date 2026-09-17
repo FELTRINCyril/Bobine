@@ -11,14 +11,104 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Bobine">
 <script>(function(){var s=localStorage.getItem('bobine_skin')||'cinema',m=localStorage.getItem('bobine_mode');if(!m)m=localStorage.getItem('bobine_theme')==='light'?'light':'dark';document.documentElement.dataset.skin=s;document.documentElement.dataset.mode=m;})();</script>
+<style>
+  /* Ecran de demarrage. Styles en ligne : ils s'appliquent des la premiere
+     image, sans attendre les feuilles externes, sinon l'app resterait une
+     page noire pendant tout le chargement. Les couleurs passent par les
+     tokens de theme des que themes.css est la, avec un repli par mode. */
+  #splash {
+    position: fixed;
+    inset: 0;
+    z-index: 200;
+    display: grid;
+    place-items: center;
+    background: var(--bg, #0c0a10);
+    transition: opacity .32s ease;
+  }
+  :root[data-mode="light"] #splash { background: var(--bg, #f4f2f8); }
+  #splash.is-out { opacity: 0; pointer-events: none; }
+
+  .splash-in { display: grid; justify-items: center; gap: 20px; padding: 24px; }
+
+  .splash-reel {
+    width: 62px;
+    height: 62px;
+    color: var(--accent, #ff3d6e);
+    animation: splash-spin 2.6s linear infinite;
+  }
+  :root[data-mode="light"] .splash-reel { color: var(--accent, #e83562); }
+
+  .splash-word {
+    font-family: var(--font-display, "Avenir Next Condensed", "Arial Narrow", system-ui, sans-serif);
+    font-size: 30px;
+    font-weight: 700;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    color: var(--text, #f2eff7);
+  }
+  :root[data-mode="light"] .splash-word { color: var(--text, #1a1424); }
+  .splash-word span { color: var(--accent, #ff3d6e); }
+
+  /* Fine bande lumineuse : evoque le faisceau du projecteur et montre que
+     quelque chose avance, sans pretendre connaitre une progression reelle. */
+  .splash-bar {
+    width: 132px;
+    height: 2px;
+    border-radius: 2px;
+    overflow: hidden;
+    background: color-mix(in srgb, currentColor 14%, transparent);
+    color: var(--text, #f2eff7);
+  }
+  .splash-bar i {
+    display: block;
+    width: 42%;
+    height: 100%;
+    border-radius: 2px;
+    background: var(--accent, #ff3d6e);
+    animation: splash-sweep 1.15s ease-in-out infinite;
+  }
+
+  @keyframes splash-spin { to { transform: rotate(360deg); } }
+  @keyframes splash-sweep {
+    0%   { transform: translateX(-115%); }
+    100% { transform: translateX(270%); }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .splash-reel, .splash-bar i { animation: none; }
+    .splash-bar i { width: 100%; }
+  }
+
+  /* La barre d'onglets est masquee tant que l'app n'a rien a montrer : sinon
+     elle apparait seule au-dessus du vide, et son recalcul de hauteur (la
+     safe-area iOS n'est connue qu'apres stabilisation du viewport) se voit
+     comme un saut. */
+  body.is-booting #tabbar,
+  body.is-booting #deskbar { visibility: hidden; }
+</style>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="icons/icon-180.png">
 <link rel="icon" type="image/png" href="icons/icon-180.png">
-<link rel="stylesheet" href="css/themes.css?v=1.21">
-<link rel="stylesheet" href="css/app.css?v=1.21">
-<link rel="stylesheet" href="css/desktop.css?v=1.21">
+<link rel="stylesheet" href="css/themes.css?v=1.22">
+<link rel="stylesheet" href="css/app.css?v=1.22">
+<link rel="stylesheet" href="css/desktop.css?v=1.22">
 </head>
-<body>
+<body class="is-booting">
+  <div id="splash" role="status" aria-label="Chargement de Bobine">
+    <div class="splash-in">
+      <svg class="splash-reel" viewBox="0 0 64 64" fill="none" stroke="currentColor"
+           stroke-width="3.2" stroke-linecap="round" aria-hidden="true">
+        <circle cx="32" cy="32" r="27"/>
+        <circle cx="32" cy="32" r="5.5" fill="currentColor" stroke="none"/>
+        <circle cx="32" cy="17" r="5"/>
+        <circle cx="47" cy="32" r="5"/>
+        <circle cx="32" cy="47" r="5"/>
+        <circle cx="17" cy="32" r="5"/>
+      </svg>
+      <div class="splash-word">Bobine<span>.</span></div>
+      <div class="splash-bar"><i></i></div>
+    </div>
+  </div>
   <div id="app">
     <header id="deskbar" class="deskbar" aria-hidden="false"></header>
     <main id="view" class="view"></main>
@@ -32,6 +122,6 @@
       <p>Bobine se regarde en portrait.<br>Remets ton telephone dans le bon sens !</p>
     </div>
   </div>
-  <script type="module" src="js/app.js?v=1.21"></script>
+  <script type="module" src="js/app.js?v=1.22"></script>
 </body>
 </html>

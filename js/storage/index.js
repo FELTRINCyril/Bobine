@@ -95,8 +95,9 @@ export async function applySnapshot(doc, { mode = 'merge' } = {}) {
   }
 
   // Donnees
+  let changed = 0;
   if (mode === 'replace') await replaceAll(doc.items, doc.playlists, doc.people);
-  else await mergeAll(doc.items, doc.playlists, doc.people);
+  else changed = await mergeAll(doc.items, doc.playlists, doc.people);
 
-  return { langChanged: !!p.lang && p.lang !== prevLang };
+  return { langChanged: !!p.lang && p.lang !== prevLang, changed };
 }

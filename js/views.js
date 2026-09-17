@@ -14,6 +14,7 @@ import { getConfig, resetConfig, getMetadataMode, setMetadataMode } from './conf
 import { SKINS, getSkin, getMode, getSkinInfo, openThemePicker } from './themes.js';
 import { openConfirmSheet, openAskSheet } from './confirm.js';
 import { bindInfiniteScroll } from './scrollLoad.js';
+import { goBack } from './nav.js';
 import { disconnect, syncNow, syncStatus, resetAllData } from './sync.js';
 import { hasSync } from './storage/index.js';
 import { promptCloudConnect, downloadExport } from './cloudConnect.js';
@@ -80,7 +81,9 @@ function pageHead(title, { back = false } = {}) {
 }
 
 function bindBack(root) {
-  root.querySelector('[data-nav="back"]')?.addEventListener('click', () => history.back());
+  // goBack (nav.js) au lieu de history.back() : depuis la premiere page de
+  // l'app, un history.back() brut sortait de la navigation de l'app.
+  root.querySelector('[data-nav="back"]')?.addEventListener('click', () => goBack());
 }
 
 function hRow(medias, type, opts = {}) {
@@ -729,11 +732,14 @@ export async function renderDetail(type, id) {
   const anilistScore = d._fusion?.merged?.scoreAnilist?.value;
   const poster = img(d.poster_path, 'w342');
 
-  // "VF" = fiche traduite en francais chez TMDB (titre/synopsis).
-  // TMDB ne connait pas le doublage audio : c'est un indicateur, pas une garantie.
-  const hasVF = (d.translations?.translations || []).some(
-    (t) => t.iso_639_1 === 'fr' && (t.data?.overview || t.data?.title || t.data?.name)
-  );
+  // Pas de pastille "VF" ici. L'ancienne version la posait des que TMDB
+  // possedait une traduction francaise des METADONNEES (titre / synopsis), ce
+  // qui est vrai pour a peu pres tout : mesure faite sur 12 animes, les 12
+  // affichaient "VF", y compris ceux qui n'ont aucun doublage francais. Un
+  // badge toujours allume n'informe pas, il induit en erreur.
+  // TMDB n'expose aucune donnee de piste audio. Afficher une VF fiable
+  // suppose une autre source (JustWatch expose audioLanguages et l'id TMDB),
+  // donc un passage par le Worker : a faire dans un second temps.
 
   page.appendChild(h(`
     <div class="detail-top">
@@ -746,7 +752,6 @@ export async function renderDetail(type, id) {
           ${year ? `<span>${year}</span>` : ''}
           ${runtime ? `<span>${runtime}</span>` : ''}
           <span>${typeLabel(type, meta.isAnime)}</span>
-          ${hasVF ? '<span class="vf-chip">VF</span>' : ''}
         </div>
       </div>
     </div>

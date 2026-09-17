@@ -13,6 +13,7 @@ import { isConfigured } from './config.js';
 import { renderOnboarding } from './onboarding.js';
 import { initSync } from './sync.js';
 import { buildDeskbar, syncDeskbar, enhanceShelves } from './deskbar.js';
+import { stampHistory, navIndex, markFirst, goBack, canGoBack } from './nav.js';
 
 const TABS = [
   { hash: '#/home', label: 'Accueil', icon: 'home' },
@@ -55,9 +56,7 @@ function bindTabDoubleTap(bar) {
       e.preventDefault();
       last = { hash: '', time: 0 };
       window.scrollTo({ top: 0, behavior: 'smooth' });
-      scrollPos.set(hash, 0);
-      const cached = pageCache.get(hash);
-      if (cached) cached.y = 0;
+      scrollPos.set(navIndex(), 0);
       return;
     }
     last = { hash, time: now };
@@ -71,7 +70,9 @@ function syncTabbar(hash) {
   syncDeskbar(hash);
 }
 
-// Position de scroll memorisee par onglet
+// Position de scroll et pages memorisees, indexees par NUMERO d'entree
+// d'historique (voir nav.js) et non plus par hash : deux visites de la meme
+// page ont ainsi chacune leur etat.
 const scrollPos = new Map();
 let currentHash = '';
 let skipPageAnim = false; // pose par le swipe retour pour eviter le flash
@@ -82,12 +83,16 @@ let skipPageAnim = false; // pose par le swipe retour pour eviter le flash
 // Pages locales (watchlist, playlist...) exclus : elles se re-rendent pour
 // rester a jour, mais sans animation d'entree au retour (voir isBack).
 // "search" est volontairement exclu : la recherche repart toujours a zero.
-const pageCache = new Map(); // hash -> { el, y, hscrolls }
+const pageCache = new Map(); // numero d'entree -> { el, y, hscrolls }
 const CACHEABLE = new Set([
   'home', 'movies', 'series', 'anime', 'detail', 'browse', 'listing',
   'person', 'advanced',
 ]);
-const navStack = [];
+// Plafond volontairement bas : chaque entree retient un arbre DOM complet
+// (une saison depliee de 200 episodes depasse 2000 noeuds). Trop d'entrees
+// saturent la memoire d'un iPhone, ce qui provoque des a-coups puis un
+// rechargement de la PWA par iOS - percu comme "l'app revient a l'accueil".
+const PAGE_CACHE_MAX = 4;
 
 // Met a jour badges / bouton + sans recreer les <img> (evite le flash).
 function refreshCards(root) {
@@ -139,33 +144,42 @@ function route() {
   const hash = location.hash || '#/home';
   const [, path, a, b, c] = hash.split('/'); // '#', path, args
 
-  // met de cote la page qu'on quitte
+  const quittee = navIndex();
+  const sens = stampHistory();
+  const isBack = sens === 'back';
+
+  // met de cote la page qu'on quitte, sous le numero de SON entree
   if (currentHash && currentHash !== hash) {
-    scrollPos.set(currentHash, window.scrollY);
+    scrollPos.set(quittee, window.scrollY);
     const prevPath = currentHash.split('/')[1];
     if (CACHEABLE.has(prevPath) && view.firstElementChild) {
-      pageCache.set(currentHash, {
+      pageCache.set(quittee, {
         el: view.firstElementChild,
         y: window.scrollY,
         hscrolls: snapshotHscrolls(view.firstElementChild),
       });
-      while (pageCache.size > 10) pageCache.delete(pageCache.keys().next().value);
+      while (pageCache.size > PAGE_CACHE_MAX) {
+        pageCache.delete(pageCache.keys().next().value);
+      }
     }
   }
-
-  const isBack = navStack.length > 1 && navStack[navStack.length - 2] === hash;
-  if (isBack) navStack.pop();
-  else if (hash !== navStack[navStack.length - 1]) navStack.push(hash);
   currentHash = hash;
+
+  // En avancant vers une nouvelle entree, les entrees "futures" que le
+  // navigateur vient de detruire ne reviendront jamais : on libere leur DOM.
+  if (sens === 'forward') {
+    for (const k of [...pageCache.keys()]) if (k > navIndex()) pageCache.delete(k);
+    for (const k of [...scrollPos.keys()]) if (k > navIndex()) scrollPos.delete(k);
+  }
 
   document.getElementById('overlay-root').innerHTML = '';
   syncTabbar(hash);
   document.body.classList.toggle('on-search', path === 'search' || path === 'advanced');
 
   // retour arriere vers une page en cache -> restauration a l'identique
-  const cached = isBack ? pageCache.get(hash) : null;
+  const cached = isBack ? pageCache.get(navIndex()) : null;
   if (cached) {
-    pageCache.delete(hash);
+    pageCache.delete(navIndex());
     skipPageAnim = false;
     cached.el.classList.add('no-anim');
     view.replaceChildren(cached.el);
@@ -206,7 +220,7 @@ function route() {
   }
 
   requestAnimationFrame(() => {
-    window.scrollTo(0, scrollPos.get(hash) || 0);
+    window.scrollTo(0, scrollPos.get(navIndex()) || 0);
   });
 }
 
@@ -240,27 +254,52 @@ function bindQuickActions() {
 }
 
 // Slide depuis le bord gauche = retour arriere (comme le geste natif iOS,
-// absent en PWA plein ecran)
+// absent en PWA plein ecran).
+//
+// Piege principal, corrige ici : une etagere horizontale (.hscroll) ou une
+// rangee de filtres (.chips) qui commence pres du bord gauche captait le
+// geste. Faire simplement defiler un carrousel declenchait un history.back()
+// et renvoyait sur une page arbitraire. On ignore donc tout geste amorce dans
+// un conteneur qui defile horizontalement.
 function bindEdgeSwipeBack() {
+  const EDGE = 28;        // largeur de la zone sensible, en px
+  const DIST = 70;        // course minimale
+  const DUREE_MAX = 600;  // au-dela, c'est une manipulation, pas un geste
   let start = null;
+
+  const sheetOuverte = () => document.getElementById('overlay-root').children.length > 0;
+
   window.addEventListener('touchstart', (e) => {
-    const t = e.touches[0];
-    start = t.clientX <= 32 ? { x: t.clientX, y: t.clientY } : null;
-    // pas de retour si une sheet est ouverte
-    if (document.getElementById('overlay-root').children.length) start = null;
-  }, { passive: true });
-  window.addEventListener('touchend', (e) => {
-    if (!start) return;
-    const t = e.changedTouches[0];
-    const dx = t.clientX - start.x;
-    const dy = Math.abs(t.clientY - start.y);
-    if (dx > 70 && dy < 60) {
-      skipPageAnim = true; // pas d'animation d'entree -> pas de flash
-      history.back();
-    }
     start = null;
+    if (e.touches.length !== 1) return;          // pincement / multi-touch
+    const t = e.touches[0];
+    if (t.clientX > EDGE) return;
+    if (sheetOuverte()) return;
+    // Geste amorce dans un defilement horizontal : il appartient a ce dernier.
+    if (t.target instanceof Element
+        && t.target.closest('.hscroll, .chips, .season-body, [data-noswipe]')) return;
+    start = { x: t.clientX, y: t.clientY, at: Date.now() };
   }, { passive: true });
+
+  window.addEventListener('touchend', (e) => {
+    const s = start;
+    start = null;
+    if (!s) return;
+    if (sheetOuverte()) return;                   // sheet ouverte pendant le geste
+    if (Date.now() - s.at > DUREE_MAX) return;
+    const t = e.changedTouches[0];
+    const dx = t.clientX - s.x;
+    const dy = Math.abs(t.clientY - s.y);
+    if (dx < DIST) return;
+    if (dy > 60 || dy > dx * 0.6) return;         // trajectoire trop verticale
+    if (canGoBack()) skipPageAnim = true;         // pas d'animation -> pas de flash
+    goBack();
+  }, { passive: true });
+
+  window.addEventListener('touchcancel', () => { start = null; }, { passive: true });
 }
+
+
 
 // UI liee au scroll : loupe flottante (reapparait quand on remonte)
 // et bouton "retour en haut" en bas a droite.
@@ -279,6 +318,37 @@ function bindScrollUi() {
     else if (y > lastY + 4) floatSearch.classList.remove('show');
     lastY = y;
   }, { passive: true });
+}
+
+// Retire l'ecran de demarrage. Idempotent, et appele aussi par un filet de
+// securite : un splash qui reste colle serait pire que le probleme d'origine.
+let splashOte = false;
+function hideSplash() {
+  if (splashOte) return;
+  splashOte = true;
+  document.body.classList.remove('is-booting');
+  const el = document.getElementById('splash');
+  if (!el) return;
+  el.classList.add('is-out');
+  el.addEventListener('transitionend', () => el.remove(), { once: true });
+  setTimeout(() => el.remove(), 600); // si la transition ne se declenche pas
+}
+
+// Synchro cloud apres le premier rendu. Si elle rapporte des donnees plus
+// recentes, on redessine la page courante pour les refleter.
+async function syncEnArrierePlan() {
+  try {
+    const { langChanged, changed } = await initSync();
+    initAppearance();
+    if (langChanged) { location.reload(); return; }
+    if (changed) {
+      pageCache.clear(); // les pages memorisees refletent l'etat d'avant
+      route();
+    }
+  } catch (e) {
+    console.warn('[bobine] initSync', e);
+    initAppearance();
+  }
 }
 
 async function boot() {
@@ -304,24 +374,36 @@ async function boot() {
   await loadState();
 
   // Synchro distante : gere un eventuel retour OAuth et adopte le snapshot
-  // distant s'il est plus recent (peut fournir la config TMDB sur un nouvel
-  // appareil). Silencieux et sans blocage si hors ligne / non configure.
-  try {
-    const { langChanged } = await initSync();
-    initAppearance();
-    if (langChanged) { location.reload(); return; }
-  } catch (e) { console.warn('[bobine] initSync', e); initAppearance(); }
-
-  // Premiere ouverture (aucun acces TMDB configure) : ecran d'onboarding.
-  // Le routing ne demarre qu'une fois l'acces valide.
+  // distant s'il est plus recent. Sur un appareil JAMAIS configure, le cloud
+  // est la seule source possible de la config TMDB : il faut donc l'attendre.
+  // Une fois l'app configuree en revanche, plus rien ne justifie de retarder
+  // l'affichage pour un aller-retour reseau - c'etait la cause de l'ecran
+  // noir de plusieurs secondes au lancement, aggrave quand le jeton cloud
+  // etait expire (l'echec prend quelques secondes avant de rendre la main).
   if (!isConfigured()) {
-    renderOnboarding(startApp);
+    try {
+      const { langChanged } = await initSync();
+      initAppearance();
+      if (langChanged) { location.reload(); return; }
+    } catch (e) { console.warn('[bobine] initSync', e); initAppearance(); }
+
+    if (!isConfigured()) {
+      renderOnboarding(startApp);
+      hideSplash();
+    } else {
+      startApp();
+      hideSplash();
+    }
   } else {
+    // Cas courant : on affiche tout de suite avec les donnees locales, la
+    // synchro suit en arriere-plan.
     startApp();
+    hideSplash();
+    syncEnArrierePlan();
   }
 
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js?v=1.21').then((reg) => {
+    navigator.serviceWorker.register('sw.js?v=1.22').then((reg) => {
       reg.update().catch(() => {});
       const onReload = () => {
         navigator.serviceWorker.addEventListener('controllerchange', () => location.reload(), { once: true });
@@ -346,9 +428,22 @@ async function boot() {
 
 function startApp() {
   document.body.classList.remove('onboarding-on');
-  if (!location.hash) location.hash = '#/home';
+  // Affecter location.hash AJOUTAIT une entree d'historique : l'app demarrait
+  // donc avec une entree fantome sans hash juste derriere elle, et le premier
+  // retour sortait de la navigation de l'app. replaceState ne cree rien.
+  if (!location.hash) {
+    try { history.replaceState(history.state, '', '#/home'); }
+    catch { location.hash = '#/home'; }
+  }
   route();
+  markFirst(); // borne du retour arriere
   window.addEventListener('hashchange', route);
 }
 
-boot();
+// Deux filets de securite : un demarrage qui echoue ne doit jamais laisser
+// l'ecran de chargement colle sur un ecran mort.
+setTimeout(hideSplash, 12000);
+boot().catch((e) => {
+  console.error('[bobine] demarrage echoue', e);
+  hideSplash();
+});
