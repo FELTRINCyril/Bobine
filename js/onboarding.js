@@ -4,7 +4,7 @@
 import { h } from './ui.js';
 import { tr } from './i18n.js';
 import { useKey, useProxy, hasDefaultProxy, DEFAULT_PROXY, isV4Token, isConfigured } from './config.js';
-import { uploadLocal } from './sync.js';
+import { uploadLocal, restoreFromCloud, disconnect, syncStatus } from './sync.js';
 import { hasSync, getProvider } from './storage/index.js';
 import { promptCloudConnect } from './cloudConnect.js';
 
@@ -78,9 +78,58 @@ export function renderOnboarding(onDone) {
   // ---- Synchro cloud (recuperer des donnees existantes) ----
   const cloudBox = h('<div class="onb-cloud"></div>');
   cloudBox.appendChild(h(`<h2 class="onb-cloud-title">${tr('Deja des donnees sur le cloud ?')}</h2>`));
+  const secureGuard = () => {
+    if (window.isSecureContext) return true;
+    setStatus(tr('La synchro cloud necessite HTTPS (ou localhost). Deploie l\'app pour l\'utiliser sur mobile.'));
+    return false;
+  };
+
   if (hasSync()) {
+    // Compte deja lie. Le pull automatique du demarrage a pu echouer en silence
+    // (jeton expire, fenetre d'autorisation bloquee, hors ligne) : sans bouton
+    // ici, l'ecran affichait "Connecte" sans la moindre action possible.
     const p = getProvider();
     cloudBox.appendChild(h(`<p class="onb-hint onb-cloud-ok">${tr('Connecte :')} ${PROVIDER_LABEL[p] || p}</p>`));
+    const cloudBtns = h('<div class="onb-cloud-btns"></div>');
+    const restoreBtn = h(`<button class="btn ghost onb-cloud-btn">${tr('Recuperer mes donnees')}</button>`);
+    const offBtn = h(`<button class="btn ghost onb-cloud-btn">${tr('Utiliser un autre compte')}</button>`);
+    cloudBtns.append(restoreBtn, offBtn);
+    cloudBox.appendChild(cloudBtns);
+    if (syncStatus().lastError) {
+      setStatus(tr('La recuperation automatique a echoue. Appuie sur "Recuperer mes donnees".'));
+    }
+
+    restoreBtn.addEventListener('click', async () => {
+      if (!secureGuard()) return;
+      setStatus('');
+      busy(restoreBtn, true);
+      try {
+        const r = await restoreFromCloud();
+        if (r.redirected) return; // Dropbox : la page part vers l'OAuth
+        if (r.langChanged) { location.reload(); return; }
+        if (isConfigured()) {
+          setStatus(tr('Donnees recuperees !'), true);
+          setTimeout(onDone, 500);
+        } else if (r.found) {
+          setStatus(tr('Sauvegarde trouvee, mais sans acces TMDB. Configure-le ci-dessous.'));
+        } else {
+          setStatus(tr('Aucune sauvegarde sur ce compte. Configure l\'acces TMDB ci-dessous.'));
+        }
+      } catch (e) {
+        console.warn('[bobine] recuperation cloud', e);
+        setStatus(tr('Recuperation impossible : verifie ta connexion et autorise la fenetre du fournisseur.'));
+      } finally {
+        busy(restoreBtn, false);
+      }
+    });
+
+    offBtn.addEventListener('click', async () => {
+      busy(offBtn, true);
+      try { await disconnect(); }
+      catch (e) { console.warn('[bobine] deconnexion cloud', e); }
+      finally { busy(offBtn, false); }
+      renderOnboarding(onDone);
+    });
   } else {
     cloudBox.appendChild(h(`<p class="onb-hint">${tr('Connecte-toi pour recuperer tes donnees sur cet appareil.')}</p>`));
     const cloudBtns = h('<div class="onb-cloud-btns"></div>');
@@ -91,13 +140,7 @@ export function renderOnboarding(onDone) {
 
     async function tryCloud(providerId, btn) {
       busy(btn, true);
-      const r = await promptCloudConnect(providerId, {
-        secureGuard: () => {
-          if (window.isSecureContext) return true;
-          setStatus(tr('La synchro cloud necessite HTTPS (ou localhost). Deploie l\'app pour l\'utiliser sur mobile.'));
-          return false;
-        },
-      });
+      const r = await promptCloudConnect(providerId, { secureGuard });
       busy(btn, false);
       if (r === null) return;
       if (r === undefined) { setStatus(tr('Connexion au cloud impossible. Reessaie, ou configure une cle TMDB ci-dessous.')); return; }

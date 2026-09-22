@@ -96,15 +96,25 @@ async function refresh(tok) {
   return next.access_token;
 }
 
+// Meme code d'erreur que l'adaptateur Google Drive : sans jeton de
+// rafraichissement utilisable, seul un nouveau passage par l'OAuth peut aider.
+function authRequired() {
+  const e = new Error('dropbox: nouvelle autorisation requise');
+  e.code = 'AUTH_REQUIRED';
+  return e;
+}
+
 async function accessToken() {
-  let tok = getToken();
-  if (!tok) throw new Error('non connecte');
-  if (Date.now() > tok.expires_at - 60000 && tok.refresh_token) tok.access_token = await refresh(tok);
+  const tok = getToken();
+  if (!tok) throw authRequired();
+  const expired = Date.now() > tok.expires_at - 60000;
+  if (expired && !tok.refresh_token) throw authRequired();
+  if (expired) return await refresh(tok);
   return tok.access_token;
 }
 
 // ---- Fichier ----
-export async function pull() {
+export async function pull(_opts) {
   const at = await accessToken();
   const res = await fetch(DL, {
     method: 'POST',
@@ -115,7 +125,7 @@ export async function pull() {
   return JSON.parse(await res.text());
 }
 
-export async function push(doc) {
+export async function push(doc, _opts) {
   const at = await accessToken();
   const res = await fetch(UL, {
     method: 'POST',
@@ -129,7 +139,7 @@ export async function push(doc) {
   if (!res.ok) throw new Error(`dropbox upload ${res.status}`);
 }
 
-export async function wipe() {
+export async function wipe(_opts) {
   const at = await accessToken();
   const res = await fetch(DEL, {
     method: 'POST',
@@ -143,4 +153,4 @@ export async function wipe() {
   if (!res.ok) throw new Error(`dropbox delete ${res.status}`);
 }
 
-export const adapter = { id: 'dropbox', usesRedirect: true, beginAuth, isRedirectCallback, completeAuth, pull, push, wipe };
+export const adapter = { id: 'dropbox', usesRedirect: true, beginAuth, reauth: beginAuth, isRedirectCallback, completeAuth, pull, push, wipe };

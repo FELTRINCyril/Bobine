@@ -200,6 +200,33 @@ export async function uploadLocal() {
   await doPush();
 }
 
+// Recuperation explicite depuis le cloud, declenchee par un geste utilisateur :
+// on a donc le droit de rouvrir une fenetre d'autorisation, ce que la synchro
+// automatique du demarrage ne peut pas faire. Sert quand le compte est deja lie
+// mais que ce pull automatique a echoue (jeton expire, popup bloquee, hors
+// ligne) - sans ca l'onboarding restait bloque sur "Connecte" sans aucune
+// action possible. Leve en cas d'echec, pour que l'appelant puisse le dire.
+export async function restoreFromCloud() {
+  const ad = current();
+  if (!ad) throw new Error('aucun fournisseur');
+  let remote;
+  try {
+    remote = await ad.pull({ interactive: true });
+  } catch (e) {
+    if (e?.code !== 'AUTH_REQUIRED' || !ad.reauth) { noteFailure('pull', e); throw e; }
+    try {
+      await ad.reauth();
+      // Modele redirection (Dropbox) : la page part, on ne revient pas ici.
+      if (ad.usesRedirect) return { found: false, langChanged: false, redirected: true };
+      remote = await ad.pull({ interactive: true });
+    } catch (e2) { noteFailure('pull', e2); throw e2; }
+  }
+  if (!remote) { noteSuccess(); return { found: false, langChanged: false }; }
+  const r = await adoptRemote(remote);
+  await doPush(); // le cloud recoit la fusion, comme a la connexion initiale
+  return { ...r, found: true };
+}
+
 export function syncStatus() {
   return { provider: getProvider(), lastSync, lastError, healthy: !lastError };
 }

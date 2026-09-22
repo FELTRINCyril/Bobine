@@ -318,6 +318,12 @@ const EN = {
   // Sauvegarde / synchronisation
   'Sauvegarde et synchronisation': 'Backup & sync',
   'Connecte :': 'Connected:',
+  'Recuperer mes donnees': 'Restore my data',
+  'Utiliser un autre compte': 'Use another account',
+  'La recuperation automatique a echoue. Appuie sur "Recuperer mes donnees".': 'Automatic restore failed. Tap "Restore my data".',
+  'Sauvegarde trouvee, mais sans acces TMDB. Configure-le ci-dessous.': 'Backup found, but it has no TMDB access. Set it up below.',
+  'Aucune sauvegarde sur ce compte. Configure l\'acces TMDB ci-dessous.': 'No backup on this account. Set up TMDB access below.',
+  'Recuperation impossible : verifie ta connexion et autorise la fenetre du fournisseur.': 'Restore failed: check your connection and allow the provider window.',
   'Synchroniser maintenant': 'Sync now',
   'Synchronisation...': 'Syncing...',
   'Synchronise': 'Synced',

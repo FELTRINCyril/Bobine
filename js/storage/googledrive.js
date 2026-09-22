@@ -54,10 +54,27 @@ export async function beginAuth() {
 export function isRedirectCallback() { return false; }
 export async function completeAuth() { return false; }
 
-async function accessToken() {
+// Le modele "token" de Google n'a pas de jeton de rafraichissement : renouveler
+// passe forcement par une popup, or une popup n'est autorisee que pendant un
+// geste utilisateur. Hors geste (synchro automatique au demarrage), on echoue
+// donc avec AUTH_REQUIRED plutot que de declencher une popup que le navigateur
+// bloquera en silence - l'appelant peut alors proposer un bouton.
+function authRequired() {
+  const e = new Error('gdrive: nouvelle autorisation requise');
+  e.code = 'AUTH_REQUIRED';
+  return e;
+}
+
+async function accessToken(interactive = false) {
   const tok = getToken();
   if (tok && Date.now() < tok.expires_at - 60000) return tok.access_token;
+  if (!interactive) throw authRequired();
   return await requestToken(''); // renouvellement (silencieux si session active)
+}
+
+// Renouvellement explicite, a appeler depuis un gestionnaire de clic.
+export async function reauth() {
+  await requestToken('');
 }
 
 async function findId(at) {
@@ -70,8 +87,8 @@ async function findId(at) {
   return fileId;
 }
 
-export async function pull() {
-  const at = await accessToken();
+export async function pull({ interactive = false } = {}) {
+  const at = await accessToken(interactive);
   const id = await findId(at);
   if (!id) return null; // fichier absent
   const res = await fetch(`${API}/files/${id}?alt=media`, { headers: { Authorization: `Bearer ${at}` } });
@@ -79,8 +96,8 @@ export async function pull() {
   return JSON.parse(await res.text());
 }
 
-export async function push(doc) {
-  const at = await accessToken();
+export async function push(doc, { interactive = false } = {}) {
+  const at = await accessToken(interactive);
   const body = JSON.stringify(doc);
   const id = fileId || await findId(at);
   if (id) {
@@ -106,8 +123,8 @@ export async function push(doc) {
   }
 }
 
-export async function wipe() {
-  const at = await accessToken();
+export async function wipe({ interactive = false } = {}) {
+  const at = await accessToken(interactive);
   const id = await findId(at);
   if (!id) return;
   const res = await fetch(`${API}/files/${id}`, {
@@ -118,4 +135,4 @@ export async function wipe() {
   fileId = null;
 }
 
-export const adapter = { id: 'gdrive', usesRedirect: false, beginAuth, isRedirectCallback, completeAuth, pull, push, wipe };
+export const adapter = { id: 'gdrive', usesRedirect: false, beginAuth, reauth, isRedirectCallback, completeAuth, pull, push, wipe };

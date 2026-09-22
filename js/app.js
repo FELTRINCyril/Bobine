@@ -403,7 +403,7 @@ async function boot() {
   }
 
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js?v=1.22').then((reg) => {
+    navigator.serviceWorker.register('sw.js?v=1.23').then((reg) => {
       reg.update().catch(() => {});
       const onReload = () => {
         navigator.serviceWorker.addEventListener('controllerchange', () => location.reload(), { once: true });
