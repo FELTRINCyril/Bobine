@@ -11,9 +11,10 @@ import {
 } from './views.js';
 import { isConfigured } from './config.js';
 import { renderOnboarding } from './onboarding.js';
-import { initSync } from './sync.js';
+import { initSync, handleAuthRedirect, afterConnect, needsReconnect } from './sync.js';
 import { buildDeskbar, syncDeskbar, enhanceShelves } from './deskbar.js';
 import { stampHistory, navIndex, markFirst, goBack, canGoBack } from './nav.js';
+import { openSyncPrompt, watchSyncAuth, leverSnooze } from './syncPrompt.js';
 
 const TABS = [
   { hash: '#/home', label: 'Accueil', icon: 'home' },
@@ -336,11 +337,12 @@ function hideSplash() {
 
 // Synchro cloud apres le premier rendu. Si elle rapporte des donnees plus
 // recentes, on redessine la page courante pour les refleter.
-async function syncEnArrierePlan() {
+async function syncEnArrierePlan(justConnected = false) {
   try {
-    const { langChanged, changed } = await initSync();
+    const { langChanged, changed, needsAuth } = await initSync(justConnected);
     initAppearance();
     if (langChanged) { location.reload(); return; }
+    if (needsAuth) { openSyncPrompt(); return; }
     if (changed) {
       pageCache.clear(); // les pages memorisees refletent l'etat d'avant
       route();
@@ -356,10 +358,14 @@ async function boot() {
   // Copie de secours locale saturee (quota) : on previent une seule fois.
   window.addEventListener('bobine:backup-degraded',
     () => toast(tr('Sauvegarde locale saturee : pense a exporter.')), { once: true });
-  // Synchro cloud tombee : l'utilisateur doit l'apprendre tout de suite, pas
-  // le jour ou il constate que ses ajouts ne sont nulle part.
-  window.addEventListener('bobine:sync-error',
-    () => toast(tr('Synchro cloud interrompue : va dans Parametres pour te reconnecter.')), { once: true });
+  // Synchro tombee : si c'est l'autorisation qui a expire, un toast fugace ne
+  // suffit pas (il disparait avant d'etre lu) - on ouvre la fenetre de
+  // reconnexion. Les pannes passageres, elles, restent en toast.
+  window.addEventListener('bobine:sync-error', (e) => {
+    if (e.detail?.needsAuth) openSyncPrompt();
+    else toast(tr('Synchro cloud indisponible pour le moment.'));
+  }, { once: true });
+  watchSyncAuth();
   const rotateMsg = document.querySelector('#rotate-lock p');
   if (rotateMsg) rotateMsg.innerHTML = `${tr('Bobine se regarde en portrait.')}<br>${tr('Remets ton telephone dans le bon sens !')}`;
   buildTabbar();
@@ -372,6 +378,38 @@ async function boot() {
     try { await navigator.storage.persist(); } catch { /* ignore */ }
   }
   await loadState();
+
+  // Retour d'un ecran d'autorisation cloud : a traiter avant tout rendu, car
+  // le jeton revient dans le fragment d'URL, la ou le routeur lit sa route.
+  const retourAuth = await handleAuthRedirect();
+  if (retourAuth.handled) {
+    leverSnooze();
+    if (retourAuth.ok) {
+      // Connexion retablie : on fusionne avec le cloud avant d'afficher, pour
+      // que l'ecran montre d'emblee l'etat consolide.
+      let fusion = {};
+      try { fusion = await afterConnect() || {}; }
+      catch (e) { console.warn('[bobine] afterConnect', e); fusion = { failed: true }; }
+      initAppearance();
+      startApp();
+      hideSplash();
+      // Un jeton accepte par Google mais refuse par Drive (revoque entre-temps)
+      // ne doit surtout pas etre annonce comme une reussite.
+      if (needsReconnect() || fusion.failed) {
+        toast(tr('La reconnexion a echoue.'));
+        openSyncPrompt({ force: true });
+      } else {
+        toast(tr('Synchronisation retablie'));
+      }
+    } else {
+      startApp();
+      hideSplash();
+      toast(retourAuth.error?.message || tr('La reconnexion a echoue.'));
+      openSyncPrompt({ force: true });
+    }
+    enregistrerServiceWorker();
+    return;
+  }
 
   // Synchro distante : gere un eventuel retour OAuth et adopte le snapshot
   // distant s'il est plus recent. Sur un appareil JAMAIS configure, le cloud
@@ -402,28 +440,31 @@ async function boot() {
     syncEnArrierePlan();
   }
 
-  if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js?v=1.23').then((reg) => {
-      reg.update().catch(() => {});
-      const onReload = () => {
-        navigator.serviceWorker.addEventListener('controllerchange', () => location.reload(), { once: true });
-      };
-      if (reg.waiting) {
-        onReload();
-        reg.waiting.postMessage({ type: 'SKIP_WAITING' });
-      }
-      reg.addEventListener('updatefound', () => {
-        const nw = reg.installing;
-        if (!nw) return;
-        nw.addEventListener('statechange', () => {
-          if (nw.state === 'installed' && navigator.serviceWorker.controller) {
-            onReload();
-            nw.postMessage({ type: 'SKIP_WAITING' });
-          }
-        });
+  enregistrerServiceWorker();
+}
+
+function enregistrerServiceWorker() {
+  if (!('serviceWorker' in navigator)) return;
+  navigator.serviceWorker.register('sw.js?v=1.24').then((reg) => {
+    reg.update().catch(() => {});
+    const onReload = () => {
+      navigator.serviceWorker.addEventListener('controllerchange', () => location.reload(), { once: true });
+    };
+    if (reg.waiting) {
+      onReload();
+      reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+    }
+    reg.addEventListener('updatefound', () => {
+      const nw = reg.installing;
+      if (!nw) return;
+      nw.addEventListener('statechange', () => {
+        if (nw.state === 'installed' && navigator.serviceWorker.controller) {
+          onReload();
+          nw.postMessage({ type: 'SKIP_WAITING' });
+        }
       });
-    }).catch(() => {});
-  }
+    });
+  }).catch(() => {});
 }
 
 function startApp() {

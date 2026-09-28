@@ -153,4 +153,23 @@ export async function wipe(_opts) {
   if (!res.ok) throw new Error(`dropbox delete ${res.status}`);
 }
 
-export const adapter = { id: 'dropbox', usesRedirect: true, beginAuth, reauth: beginAuth, isRedirectCallback, completeAuth, pull, push, wipe };
+// Dropbox delivre un refresh_token : tant qu'il est present, le jeton se
+// renouvelle silencieusement et la connexion ne se perime pas.
+export function hasValidToken() {
+  const tok = getToken();
+  return !!tok && (!!tok.refresh_token || Date.now() < (tok.expires_at || 0) - 60000);
+}
+
+export const adapter = {
+  id: 'dropbox',
+  label: 'Dropbox',
+  usesRedirect: true,
+  beginAuth,
+  reauth: beginAuth,
+  isRedirectCallback,
+  completeAuth,
+  hasValidToken,
+  pull,
+  push,
+  wipe,
+};

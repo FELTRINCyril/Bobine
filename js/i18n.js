@@ -390,6 +390,39 @@ const EN = {
     'Cloud sync interrupted: go to Settings to reconnect.',
   'dont animes': 'of which anime',
 
+  // Reconnexion cloud
+  'Synchronisation interrompue': 'Sync interrupted',
+  'Ton compte': 'Your',
+  "doit autoriser Bobine a nouveau. Tant que ce n'est pas fait, ce que tu ajoutes reste sur cet appareil uniquement.":
+    'account needs to authorize Bobine again. Until then, anything you add stays on this device only.',
+  'Derniere sauvegarde :': 'Last backup:',
+  'Plus tard': 'Later',
+  'Reconnecter': 'Reconnect',
+  'Redirection...': 'Redirecting...',
+  'Aucune donnee ne sera perdue : tes ajouts seront envoyes des la reconnexion.':
+    'Nothing will be lost: your additions will be uploaded as soon as you reconnect.',
+  'Reconnecter le cloud': 'Reconnect cloud',
+  'Synchronisation retablie': 'Sync restored',
+  'La reconnexion a echoue.': 'Reconnection failed.',
+  'Synchro cloud indisponible pour le moment.': 'Cloud sync unavailable right now.',
+  'Synchro impossible pour le moment. Reessaie plus tard.': 'Sync failed for now. Try again later.',
+  'Autorisation expiree : tes ajouts restent sur cet appareil. Reconnecte-toi pour les envoyer.':
+    'Authorization expired: your additions stay on this device. Reconnect to upload them.',
+  "Google limite l'autorisation a une heure et ne permet pas de la renouveler sans toi : une reconnexion est donc demandee de temps en temps.":
+    'Google limits authorization to one hour and cannot renew it without you, so a reconnection is needed from time to time.',
+  "a l'instant": 'just now',
+  'heure': 'hour',
+  'heures': 'hours',
+  'jour': 'day',
+  'jours': 'days',
+
+  'Reconnexion bloquee': 'Reconnection blocked',
+  'Reessayer': 'Try again',
+  "La derniere tentative n'a pas abouti : Google a refuse la demande avant d'afficher l'ecran d'autorisation.":
+    'The last attempt did not go through: Google rejected the request before showing the consent screen.',
+  'Dans la console Google Cloud, ajoute cette adresse aux URI de redirection autorisees du client OAuth :':
+    'In the Google Cloud console, add this address to the OAuth client authorized redirect URIs:',
+
   // Divers
   'sur': 'of',
   'Remonter en haut': 'Back to top',

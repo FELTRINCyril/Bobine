@@ -27,7 +27,12 @@ let lastError = null;  // { at, op, message } de la derniere operation ratee
 // que les reglages puissent l'afficher, et on previent l'app une seule fois.
 function noteFailure(op, err) {
   const first = !lastError;
-  lastError = { at: Date.now(), op, message: String(err?.message || err || '') };
+  lastError = {
+    at: Date.now(),
+    op,
+    message: String(err?.message || err || ''),
+    needsAuth: !!err?.needsAuth,
+  };
   console.warn(`[bobine] synchro distante (${op}) echouee`, err);
   if (first) window.dispatchEvent(new CustomEvent('bobine:sync-error', { detail: lastError }));
 }
@@ -36,6 +41,43 @@ function noteSuccess() {
   lastError = null;
   lastSync = Date.now();
   try { localStorage.setItem(K_LAST_SYNC, String(lastSync)); } catch { /* quota */ }
+}
+
+// Vrai quand un compte est bien lie mais que son autorisation n'est plus
+// valable : le seul remede est un geste de l'utilisateur. On distingue ce cas
+// d'une panne reseau, qui se resoudra toute seule.
+export function needsReconnect() {
+  const ad = current();
+  if (!ad || !hasSync()) return false;
+  if (ad.hasValidToken && !ad.hasValidToken()) return true;
+  return !!lastError?.needsAuth;
+}
+
+// Relance l'autorisation. A n'appeler QUE depuis un geste utilisateur : le
+// fournisseur quitte la page vers son ecran de consentement.
+export function reconnect() {
+  const ad = current();
+  if (!ad) return false;
+  ad.beginAuth();
+  return true;
+}
+
+// Vrai quand la derniere tentative de reconnexion n'est jamais revenue : le
+// fournisseur a refuse la demande avant meme d'afficher l'ecran (URI de
+// redirection non declaree). Message actionnable plutot que bouton inerte.
+export function redirectionNonAutorisee() {
+  const ad = current();
+  return !!(ad?.tentativeRedirectionEchouee && ad.tentativeRedirectionEchouee());
+}
+
+export function oublierTentativeAuth() {
+  const ad = current();
+  ad?.oublierTentative?.();
+}
+
+export function uriDeRedirection() {
+  const ad = current();
+  return ad?.redirectUri ? ad.redirectUri() : '';
 }
 
 function schedulePush(delay = 2000) {
@@ -120,23 +162,39 @@ async function pullAndReconcile() {
   return { ...r, adopted: remoteAt > localAt };
 }
 
-// Appele au boot APRES loadState. Gere un eventuel retour OAuth, puis
-// synchronise. Retourne { langChanged } si l'adoption a change la langue.
-export async function initSync() {
-  let justConnected = false;
+// Retour d'un ecran d'autorisation (redirection). A appeler TOUT AU DEBUT du
+// demarrage : le jeton revient dans le fragment d'URL, la ou le routeur lit sa
+// route. Tant que ce n'est pas traite et l'URL nettoyee, l'app afficherait
+// n'importe quoi et rejouerait le retour a chaque rechargement.
+// Retourne { handled, ok, error }.
+export async function handleAuthRedirect() {
   for (const ad of Object.values(REGISTRY)) {
-    if (ad.isRedirectCallback && ad.isRedirectCallback()) {
-      try {
-        if (await ad.completeAuth()) {
-          setProvider(ad.id);
-          justConnected = true;
-        }
-      } catch (e) { noteFailure('auth', e); }
-      break;
+    if (!ad.isRedirectCallback || !ad.isRedirectCallback()) continue;
+    try {
+      if (await ad.completeAuth()) {
+        setProvider(ad.id);
+        lastError = null;
+        return { handled: true, ok: true, provider: ad.id };
+      }
+      return { handled: true, ok: false };
+    } catch (e) {
+      noteFailure('auth', e);
+      return { handled: true, ok: false, error: lastError };
     }
   }
+  return { handled: false };
+}
+
+// Appele au boot APRES loadState (et apres handleAuthRedirect).
+// `justConnected` force la fusion initiale avec le cloud.
+// Retourne { langChanged, changed } ou { needsAuth } si l'autorisation a expire.
+export async function initSync(justConnected = false) {
   ready = true;
   if (!hasSync()) return {};
+  // Autorisation perimee : inutile de lancer des requetes vouees a echouer,
+  // et surtout on ne declenche aucune authentification ici - nous ne sommes
+  // pas dans un geste utilisateur, le navigateur la bloquerait.
+  if (needsReconnect()) return { needsAuth: true };
   if (justConnected) return await connectSync();
   return await pullAndReconcile();
 }
@@ -147,16 +205,19 @@ window.addEventListener('bobine:changed', () => {
   schedulePush();
 });
 
-// Demarre la connexion a un fournisseur.
-// - modele redirection (Dropbox) : quitte la page ; le provider est active au
-//   retour, dans initSync (connectSync = cloud prioritaire).
-// - modele popup (Google Drive) : on attend le jeton, puis on active + synchro.
+// Demarre la connexion a un fournisseur. Les deux passent desormais par une
+// redirection : la page est quittee, le fournisseur est active au retour dans
+// handleAuthRedirect, puis la fusion initiale a lieu (connectSync).
 export async function connect(providerId) {
   const ad = REGISTRY[providerId];
   if (!ad) return {};
-  if (ad.usesRedirect) { ad.beginAuth(); return {}; }
-  await ad.beginAuth();
-  setProvider(providerId);
+  ad.beginAuth();
+  return {};
+}
+
+// Fusion initiale apres une connexion reussie.
+export async function afterConnect() {
+  if (!hasSync()) return {};
   return await connectSync();
 }
 
@@ -189,9 +250,15 @@ export async function resetAllData() {
 // l'utilisateur au lieu d'annoncer une reussite systematique.
 export async function syncNow() {
   if (!hasSync()) return { ok: false, reason: 'no-provider' };
+  if (needsReconnect()) return { ok: false, needsAuth: true, reason: 'auth' };
   const r = await pullAndReconcile();
   const pushed = await doPush();
-  return { ...r, ok: !r.failed && pushed, error: lastError };
+  return {
+    ...r,
+    ok: !r.failed && pushed,
+    needsAuth: needsReconnect(),
+    error: lastError,
+  };
 }
 
 // Pousse l'etat local vers le cloud (ex. apres onboarding TMDB avec cloud deja connecte).
@@ -228,7 +295,15 @@ export async function restoreFromCloud() {
 }
 
 export function syncStatus() {
-  return { provider: getProvider(), lastSync, lastError, healthy: !lastError };
+  const na = needsReconnect();
+  return {
+    provider: getProvider(),
+    label: current()?.label || getProvider(),
+    lastSync,
+    lastError,
+    needsAuth: na,
+    healthy: !lastError && !na,
+  };
 }
 
 export const PROVIDERS = Object.keys(REGISTRY);

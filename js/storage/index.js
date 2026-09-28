@@ -30,6 +30,10 @@ export function getToken() {
 }
 export function setToken(tok) { localStorage.setItem(K_TOKEN, JSON.stringify(tok)); }
 
+// Jette le jeton sans deconnecter le fournisseur : l'app reste "liee au
+// compte" mais en etat "reconnexion necessaire".
+export function clearToken() { localStorage.removeItem(K_TOKEN); }
+
 export function clearSync() {
   localStorage.removeItem(K_PROVIDER);
   localStorage.removeItem(K_TOKEN);

@@ -15,9 +15,10 @@ import { SKINS, getSkin, getMode, getSkinInfo, openThemePicker } from './themes.
 import { openConfirmSheet, openAskSheet } from './confirm.js';
 import { bindInfiniteScroll } from './scrollLoad.js';
 import { goBack } from './nav.js';
-import { disconnect, syncNow, syncStatus, resetAllData } from './sync.js';
+import { disconnect, syncNow, syncStatus, resetAllData, needsReconnect, reconnect } from './sync.js';
 import { hasSync } from './storage/index.js';
 import { promptCloudConnect, downloadExport } from './cloudConnect.js';
+import { openSyncPrompt } from './syncPrompt.js';
 import {
   h, esc, I, posterCard, castCard, crewCard, anilistOnlyCard, openSheet, toast, emptyState, spinner,
   mediaTitle, mediaYear, mediaType, typeLabel, isReleased,
@@ -2209,23 +2210,32 @@ export function renderSettings() {
     // reste invisible et on continue a saisir dans le vide.
     const health = h('<div class="sync-health"></div>');
     const renderHealth = () => {
-      const { lastSync, lastError } = syncStatus();
+      const { lastSync, lastError, needsAuth } = syncStatus();
       health.innerHTML = '';
-      health.classList.toggle('sync-health--err', !!lastError);
+      health.classList.toggle('sync-health--err', !!lastError || needsAuth);
       const when = lastSync
         ? new Date(lastSync).toLocaleString(isEn() ? 'en-GB' : 'fr-FR',
           { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
         : tr('jamais');
       health.appendChild(h(`<p class="sync-health-line">${tr('Derniere synchro reussie :')} <b>${esc(when)}</b></p>`));
-      if (lastError) {
+      if (needsAuth) {
+        health.appendChild(h(`<p class="sync-health-line sync-health-msg">${tr('Autorisation expiree : tes ajouts restent sur cet appareil. Reconnecte-toi pour les envoyer.')}</p>`));
+      } else if (lastError) {
         health.appendChild(h(`<p class="sync-health-line sync-health-msg">${tr('La derniere tentative a echoue. Tes modifications recentes ne sont pas sauvegardees sur le cloud.')}</p>`));
-        if (provider === 'gdrive') {
-          health.appendChild(h(`<p class="sync-health-line sync-health-msg">${tr('Google Drive demande de se reconnecter regulierement. Utilise le bouton ci-dessous.')}</p>`));
-        }
+      }
+      if (provider === 'gdrive') {
+        health.appendChild(h(`<p class="sync-health-line">${tr('Google limite l\'autorisation a une heure et ne permet pas de la renouveler sans toi : une reconnexion est donc demandee de temps en temps.')}</p>`));
       }
     };
     renderHealth();
     box.appendChild(health);
+
+    // Bouton de reconnexion, visible des que l'autorisation a expire.
+    const reBtn = h(`<button class="set-row set-row--accent">${I.globe}<span>${tr('Reconnecter le cloud')}</span><span class="chev">${I.chevRight}</span></button>`);
+    reBtn.addEventListener('click', () => reconnect());
+    const majReconnect = () => { reBtn.hidden = !needsReconnect(); };
+    majReconnect();
+    box.appendChild(reBtn);
 
     const syncBtn = h(`<button class="set-row">${I.refresh}<span>${tr('Synchroniser maintenant')}</span><span class="chev">${I.chevRight}</span></button>`);
     syncBtn.addEventListener('click', async () => {
@@ -2234,7 +2244,15 @@ export function renderSettings() {
       const r = await syncNow();
       syncBtn.disabled = false;
       renderHealth();
-      toast(r.ok ? tr('Synchronise') : tr('Echec de la synchro. Reconnecte-toi au cloud.'));
+      majReconnect();
+      if (r.ok) { toast(tr('Synchronise')); return; }
+      if (r.needsAuth) {
+        // Cas de loin le plus frequent : ne pas laisser l'utilisateur devant un
+        // echec sans issue, lui proposer la reconnexion immediatement.
+        openSyncPrompt({ force: true });
+        return;
+      }
+      toast(tr('Synchro impossible pour le moment. Reessaie plus tard.'));
     });
     const offBtn = h(`<button class="set-row">${I.globe}<span>${tr('Se deconnecter du cloud')}</span><span class="chev">${I.chevRight}</span></button>`);
     offBtn.addEventListener('click', async () => {
