@@ -416,7 +416,8 @@
   .page:has(.stats-page),
   .page:has(> .settings-page),
   .page:has(> .person-hero),
-  .page:has(> .media-list) {
+  .page:has(> .media-list),
+  .page.page-random {
     max-width: 1100px;
     margin-left: auto;
     margin-right: auto;
@@ -517,4 +518,18 @@
   }
 
   .scrolltop { right: 24px; bottom: 24px; }
+}
+
+/* Page "Au hasard" : affiche et infos cote a cote sur grand ecran */
+@media (min-width: 1024px) {
+  .page-random .rnd-form,
+  .page-random .rnd-result-slot { max-width: 720px; margin: 0 auto; }
+  .page-random .rnd-result { display: grid; grid-template-columns: 220px 1fr; gap: 28px; align-items: start; }
+  .page-random .rnd-note { grid-column: 1 / -1; }
+  .page-random .rnd-poster { width: 220px; margin: 0; }
+  .page-random .rnd-info { margin-top: 0; text-align: left; }
+  .page-random .rnd-meta { justify-content: flex-start; }
+  .page-random .rnd-actions { grid-template-columns: repeat(3, auto); justify-content: start; }
+  .page-random .rnd-actions .btn { padding: 11px 18px; }
+  .rnd-banner { margin-left: var(--page-pad); margin-right: var(--page-pad); }
 }

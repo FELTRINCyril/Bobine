@@ -9,6 +9,7 @@ import {
   renderStats, renderLibrary, renderListing, renderBrowse,
   renderSettings, renderPerson, renderPeopleFavorites, renderAdvanced, initAppearance,
 } from './views.js';
+import { renderRandom } from './random.js';
 import { isConfigured } from './config.js';
 import { renderOnboarding } from './onboarding.js';
 import { initSync, handleAuthRedirect, afterConnect, needsReconnect } from './sync.js';
@@ -83,11 +84,12 @@ let skipPageAnim = false; // pose par le swipe retour pour eviter le flash
 // lieu de re-rendre -> pas de flash, pas de donnees perdues.
 // Pages locales (watchlist, playlist...) exclus : elles se re-rendent pour
 // rester a jour, mais sans animation d'entree au retour (voir isBack).
-// "search" est volontairement exclu : la recherche repart toujours a zero.
+// "search" en fait partie : revenir d'une fiche retrouve la recherche telle
+// qu'on l'a laissee (une NOUVELLE ouverture de la recherche repart a zero).
 const pageCache = new Map(); // numero d'entree -> { el, y, hscrolls }
 const CACHEABLE = new Set([
   'home', 'movies', 'series', 'anime', 'detail', 'browse', 'listing',
-  'person', 'advanced',
+  'person', 'advanced', 'search', 'random',
 ]);
 // Plafond volontairement bas : chaque entree retient un arbre DOM complet
 // (une saison depliee de 200 episodes depasse 2000 noeuds). Trop d'entrees
@@ -140,6 +142,41 @@ function restoreHscrolls(root, lefts) {
   });
 }
 
+// Restaure une position de scroll. Une page re-rendue (hors cache) charge
+// souvent son contenu en differe : un scrollTo immediat etait borne a la
+// hauteur du squelette et laissait la page en haut - "le retour ne me ramene
+// pas ou j'etais". On reessaie donc a chaque croissance de la page, jusqu'a
+// atteindre la position, pendant 3 s au plus, et on abandonne des que
+// l'utilisateur touche l'ecran ou scrolle lui-meme.
+let cancelScrollRestore = () => {};
+function restoreScroll(y) {
+  cancelScrollRestore();
+  if (!y) { window.scrollTo(0, 0); return; }
+  const view = document.getElementById('view');
+  let stop = false;
+  let ro = null;
+  const cleanup = () => {
+    stop = true;
+    ro?.disconnect();
+    window.removeEventListener('touchstart', cleanup, true);
+    window.removeEventListener('wheel', cleanup, true);
+  };
+  cancelScrollRestore = cleanup;
+  const attempt = () => {
+    if (stop) return;
+    window.scrollTo(0, y);
+    if (Math.abs(window.scrollY - y) < 2) cleanup();
+  };
+  window.addEventListener('touchstart', cleanup, { capture: true, passive: true });
+  window.addEventListener('wheel', cleanup, { capture: true, passive: true });
+  if ('ResizeObserver' in window) {
+    ro = new ResizeObserver(attempt);
+    ro.observe(view);
+  }
+  requestAnimationFrame(attempt);
+  setTimeout(cleanup, 3000);
+}
+
 function route() {
   const view = document.getElementById('view');
   const hash = location.hash || '#/home';
@@ -185,10 +222,8 @@ function route() {
     cached.el.classList.add('no-anim');
     view.replaceChildren(cached.el);
     refreshCards(cached.el);
-    requestAnimationFrame(() => {
-      window.scrollTo(0, cached.y || 0);
-      restoreHscrolls(cached.el, cached.hscrolls);
-    });
+    restoreScroll(cached.y || 0);
+    requestAnimationFrame(() => restoreHscrolls(cached.el, cached.hscrolls));
     return;
   }
 
@@ -202,7 +237,8 @@ function route() {
     case 'playlists': renderPlaylists(); break;
     case 'playlist': renderPlaylist(a); break;
     case 'detail': renderDetail(a, Number(b)); break;
-    case 'search': renderSearch(); break;
+    case 'search': renderSearch({ restore: isBack }); break;
+    case 'random': renderRandom(); break;
     case 'stats': renderStats(); break;
     case 'library': renderLibrary(a); break;
     case 'listing': renderListing(a); break;
@@ -220,9 +256,10 @@ function route() {
     document.querySelector('#view .page')?.classList.add('no-anim');
   }
 
-  requestAnimationFrame(() => {
-    window.scrollTo(0, scrollPos.get(navIndex()) || 0);
-  });
+  // 'same' = meme entree re-rendue (donnees fraiches de la synchro) : on
+  // reste ou on est.
+  const sameY = window.scrollY;
+  restoreScroll(isBack ? (scrollPos.get(navIndex()) || 0) : (sens === 'same' ? sameY : 0));
 }
 
 // Bouton + sur les affiches : ajoute / retire directement de la watchlist.
@@ -257,34 +294,78 @@ function bindQuickActions() {
 // Slide depuis le bord gauche = retour arriere (comme le geste natif iOS,
 // absent en PWA plein ecran).
 //
-// Piege principal, corrige ici : une etagere horizontale (.hscroll) ou une
-// rangee de filtres (.chips) qui commence pres du bord gauche captait le
-// geste. Faire simplement defiler un carrousel declenchait un history.back()
-// et renvoyait sur une page arbitraire. On ignore donc tout geste amorce dans
-// un conteneur qui defile horizontalement.
+// Pieges corriges ici :
+//  - une etagere horizontale (.hscroll) ou une rangee de filtres (.chips)
+//    qui commence pres du bord captait le geste. On ne l'ignore plus que si
+//    ce conteneur peut encore defiler vers la gauche : collee a son debut,
+//    elle ne bougerait pas, le geste est donc bien un retour ;
+//  - aucun retour visuel : on ne savait pas si le geste avait pris, on
+//    recommencait, et deux retours partaient coup sur coup (on atterrissait
+//    deux pages plus loin, parfois apres un temps de chargement qui donnait
+//    l'impression d'un ecran fige). Une pastille suit maintenant le doigt,
+//    et un seul retour peut partir tant que le precedent n'est pas arrive ;
+//  - dans Safari (hors app installee), le navigateur fait deja ce geste :
+//    le doubler provoquait aussi un double retour. Actif en mode app seulement.
 function bindEdgeSwipeBack() {
+  const standalone = window.navigator.standalone === true
+    || window.matchMedia?.('(display-mode: standalone)').matches;
+  if (!standalone && !/[?&]swipe=1/.test(location.search)) return;
+
   const EDGE = 28;        // largeur de la zone sensible, en px
   const DIST = 70;        // course minimale
-  const DUREE_MAX = 600;  // au-dela, c'est une manipulation, pas un geste
+  const DUREE_MAX = 900;  // au-dela, c'est une manipulation, pas un geste
   let start = null;
+  let lockUntil = 0;      // un seul retour a la fois
 
   const sheetOuverte = () => document.getElementById('overlay-root').children.length > 0;
+
+  const pill = h(`<div class="swipe-back" aria-hidden="true">${I.back}</div>`);
+  document.body.appendChild(pill);
+  const showPill = (dx) => {
+    const p = Math.max(0, Math.min(1, dx / DIST));
+    pill.style.transform = `translate(${Math.min(dx, DIST + 20) * 0.6 - 44}px, -50%) scale(${0.7 + p * 0.3})`;
+    pill.style.opacity = String(Math.min(1, p * 1.4));
+    pill.classList.toggle('ready', p >= 1);
+  };
+  const hidePill = () => {
+    pill.style.transform = '';
+    pill.style.opacity = '0';
+    pill.classList.remove('ready');
+  };
+
+  // Vrai si le geste doit revenir au conteneur horizontal sous le doigt.
+  const appartientAuDefilement = (target) => {
+    if (!(target instanceof Element)) return false;
+    if (target.closest('[data-noswipe]')) return true;
+    const sc = target.closest('.hscroll, .chips, .season-body, .detail-tabs');
+    return !!sc && sc.scrollLeft > 2;
+  };
 
   window.addEventListener('touchstart', (e) => {
     start = null;
     if (e.touches.length !== 1) return;          // pincement / multi-touch
+    if (Date.now() < lockUntil) return;
     const t = e.touches[0];
     if (t.clientX > EDGE) return;
     if (sheetOuverte()) return;
-    // Geste amorce dans un defilement horizontal : il appartient a ce dernier.
-    if (t.target instanceof Element
-        && t.target.closest('.hscroll, .chips, .season-body, [data-noswipe]')) return;
-    start = { x: t.clientX, y: t.clientY, at: Date.now() };
+    if (appartientAuDefilement(t.target)) return;
+    start = { x: t.clientX, y: t.clientY, at: Date.now(), active: false };
+  }, { passive: true });
+
+  window.addEventListener('touchmove', (e) => {
+    if (!start) return;
+    const t = e.touches[0];
+    const dx = t.clientX - start.x;
+    const dy = Math.abs(t.clientY - start.y);
+    if (!start.active && dy > 24 && dy > dx) { start = null; hidePill(); return; } // scroll vertical
+    if (dx > 10) start.active = true;
+    if (start.active) showPill(dx);
   }, { passive: true });
 
   window.addEventListener('touchend', (e) => {
     const s = start;
     start = null;
+    hidePill();
     if (!s) return;
     if (sheetOuverte()) return;                   // sheet ouverte pendant le geste
     if (Date.now() - s.at > DUREE_MAX) return;
@@ -292,12 +373,15 @@ function bindEdgeSwipeBack() {
     const dx = t.clientX - s.x;
     const dy = Math.abs(t.clientY - s.y);
     if (dx < DIST) return;
-    if (dy > 60 || dy > dx * 0.6) return;         // trajectoire trop verticale
+    if (dy > 80 || dy > dx * 0.7) return;         // trajectoire trop verticale
+    lockUntil = Date.now() + 700;
     if (canGoBack()) skipPageAnim = true;         // pas d'animation -> pas de flash
     goBack();
   }, { passive: true });
 
-  window.addEventListener('touchcancel', () => { start = null; }, { passive: true });
+  window.addEventListener('touchcancel', () => { start = null; hidePill(); }, { passive: true });
+  // Le retour est arrive : un nouveau geste peut partir.
+  window.addEventListener('hashchange', () => { lockUntil = Math.min(lockUntil, Date.now() + 150); });
 }
 
 
@@ -354,6 +438,10 @@ async function syncEnArrierePlan(justConnected = false) {
 }
 
 async function boot() {
+  // Le navigateur restaure lui-meme le scroll au retour arriere, avant que la
+  // page soit re-rendue : il se battait avec restoreScroll() et gagnait
+  // parfois, laissant la page a une position arbitraire.
+  try { history.scrollRestoration = 'manual'; } catch { /* ignore */ }
   initAppearance();
   // Copie de secours locale saturee (quota) : on previent une seule fois.
   window.addEventListener('bobine:backup-degraded',
@@ -445,7 +533,7 @@ async function boot() {
 
 function enregistrerServiceWorker() {
   if (!('serviceWorker' in navigator)) return;
-  navigator.serviceWorker.register('sw.js?v=1.24').then((reg) => {
+  navigator.serviceWorker.register('sw.js?v=1.25').then((reg) => {
     reg.update().catch(() => {});
     const onReload = () => {
       navigator.serviceWorker.addEventListener('controllerchange', () => location.reload(), { once: true });

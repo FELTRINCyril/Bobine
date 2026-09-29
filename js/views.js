@@ -20,11 +20,12 @@ import { hasSync } from './storage/index.js';
 import { promptCloudConnect, downloadExport } from './cloudConnect.js';
 import { openSyncPrompt } from './syncPrompt.js';
 import {
-  h, esc, I, posterCard, castCard, crewCard, anilistOnlyCard, openSheet, toast, emptyState, spinner,
+  h, esc, I, posterCard, castCard, crewCard, anilistOnlyCard, openSheet, toast, emptyState, spinner, ratingBadge,
   mediaTitle, mediaYear, mediaType, typeLabel, isReleased,
 } from './ui.js';
+import { RATINGS, ratingOf, ratingInfo, ratingLabel } from './ratings.js';
 import {
-  toggleFavorite, toggleAdd, setMoviePlays, setEpisodePlays,
+  bindRatingButton, toggleAdd, removeFromList, setMoviePlays, setEpisodePlays,
   markSeason, updateItemTotals, openPlaylistSheet,
   cacheEpisodeRuntimes, syncTvRuntimes,
   episodesUnder, levelUpEpisodes,
@@ -35,7 +36,7 @@ const $view = () => document.getElementById('view');
 // Etat d'erreur d'un chargement TMDB. Une cle refusee affichait "Hors ligne",
 // ce qui envoyait chercher un probleme de reseau alors qu'il faut reconfigurer
 // l'acces : on distingue les deux.
-function apiErrorState(e, icon = 'film') {
+export function apiErrorState(e, icon = 'film') {
   return isAuthError(e)
     ? emptyState(icon, tr('Acces TMDB refuse'), tr('Ta cle TMDB est invalide ou revoquee. Reconfigure-la dans Parametres.'))
     : emptyState(icon, tr('Hors ligne'), tr('Impossible de charger TMDB.'));
@@ -67,7 +68,7 @@ function metaFrom(media, type) {
   };
 }
 
-function pageHead(title, { back = false } = {}) {
+export function pageHead(title, { back = false } = {}) {
   return h(`
     <div class="page-head">
       <div style="display:flex;align-items:center;gap:12px;min-width:0">
@@ -81,7 +82,7 @@ function pageHead(title, { back = false } = {}) {
   `);
 }
 
-function bindBack(root) {
+export function bindBack(root) {
   // goBack (nav.js) au lieu de history.back() : depuis la premiere page de
   // l'app, un history.back() brut sortait de la navigation de l'app.
   root.querySelector('[data-nav="back"]')?.addEventListener('click', () => goBack());
@@ -221,6 +222,9 @@ function sortListItems(items, sort, { getYear } = {}) {
     });
   } else if (sort === 'chrono') {
     return sortByMcuChrono(arr, (x) => x.tmdbId || x.id);
+  } else if (sort === 'rating') {
+    arr.sort((a, b) => ratingOf(b) - ratingOf(a)
+      || (b.updatedAt || b.addedAt || 0) - (a.updatedAt || a.addedAt || 0));
   } else {
     // recent (defaut)
     arr.sort((a, b) => (b.updatedAt || b.addedAt || 0) - (a.updatedAt || a.addedAt || 0));
@@ -228,13 +232,48 @@ function sortListItems(items, sort, { getYear } = {}) {
   return arr;
 }
 
+// Filtre de note : 'all' | 'none' (non notes) | 1..5 (note exacte).
+function matchRating(it, rf) {
+  if (!rf || rf === 'all') return true;
+  if (rf === 'none') return !ratingOf(it);
+  return ratingOf(it) === Number(rf);
+}
+
+// Rangee de choix de note (icones), partagee par la feuille de filtres et la
+// page "Mes notes".
+function ratingFilterChips(value, onPick, { withNone = true } = {}) {
+  const row = h(`
+    <div class="chips chips-wrap rate-filter">
+      <button type="button" class="chip" data-r="all">${tr('Toutes')}</button>
+      ${RATINGS.map((r) => `
+        <button type="button" class="chip chip-rate rate-${r.key}" data-r="${r.value}" aria-label="${esc(tr(r.label))}" title="${esc(tr(r.label))}">
+          ${r.icon}<span>${tr(r.label)}</span>
+        </button>`).join('')}
+      ${withNone ? `<button type="button" class="chip" data-r="none">${tr('Non notes')}</button>` : ''}
+    </div>
+  `);
+  const sync = (v) => row.querySelectorAll('[data-r]').forEach((b) => b.classList.toggle('on', b.dataset.r === String(v)));
+  sync(value || 'all');
+  row.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-r]');
+    if (!b) return;
+    const v = b.dataset.r === 'all' || b.dataset.r === 'none' ? b.dataset.r : Number(b.dataset.r);
+    sync(v);
+    onPick(v);
+  });
+  return row;
+}
+
 function openListFilterSheet({ prefs, onApply, showChrono = false }) {
   const box = h(`
     <div class="list-filter-sheet">
       <h3>${tr('Filtres et tri')}</h3>
+      <h2 class="settings-title">${tr('Ma note')}</h2>
+      <div class="rate-filter-slot"></div>
       <h2 class="settings-title">${tr('Trier par')}</h2>
       <div class="seg seg-wrap">
         <button class="seg-btn" data-s="recent">${tr('Recents')}</button>
+        <button class="seg-btn" data-s="rating">${tr('Note')}</button>
         <button class="seg-btn" data-s="title">${tr('Titre')}</button>
         <button class="seg-btn" data-s="year">${tr('Annee')}</button>
         ${showChrono ? `<button class="seg-btn" data-s="chrono">${tr('Chronologie MCU')}</button>` : ''}
@@ -243,14 +282,22 @@ function openListFilterSheet({ prefs, onApply, showChrono = false }) {
     </div>
   `);
   let sort = prefs.sort || 'recent';
+  let rating = prefs.rating || 'all';
+  box.querySelector('.rate-filter-slot').replaceWith(ratingFilterChips(rating, (v) => { rating = v; }));
   const sync = () => box.querySelectorAll('[data-s]').forEach((b) => b.classList.toggle('on', b.dataset.s === sort));
   sync();
   box.querySelectorAll('[data-s]').forEach((b) => b.addEventListener('click', () => { sort = b.dataset.s; sync(); }));
   const close = openSheet(box);
   box.querySelector('[data-act="apply"]').addEventListener('click', () => {
-    onApply({ ...prefs, sort });
+    onApply({ ...prefs, sort, rating });
     close();
   });
+}
+
+// Pastille sur le bouton de filtres quand un filtre de note est actif : sans
+// elle, une liste filtree ressemble a une liste incomplete.
+function markFilterActive(bar, rating) {
+  bar.querySelector('.chip-filter')?.classList.toggle('is-active', !!rating && rating !== 'all');
 }
 
 function typeFilterBar(filter, onChange, opts = {}) {
@@ -440,6 +487,18 @@ export async function renderHome() {
     body.appendChild(section(tr('Ma liste'), row, '#/watchlist'));
   }
 
+  // Raccourci vers le tirage au sort, avant les rangees TMDB
+  body.appendChild(h(`
+    <a class="rnd-banner" href="#/random">
+      <span class="rnd-banner-ico">${I.dice}</span>
+      <span class="rnd-banner-txt">
+        <span class="t">${tr('Je ne sais pas quoi regarder')}</span>
+        <span class="s">${tr('Tirer un titre au hasard, dans ta liste ou selon tes gouts')}</span>
+      </span>
+      <span class="chev">${I.chevRight}</span>
+    </a>
+  `));
+
   // Rangees de contenu : les 2 premieres chargent tout de suite,
   // le reste charge en avance de phase pendant le scroll.
   const slots = [
@@ -479,7 +538,7 @@ const CATALOGS = {
       { key: 'top', label: 'Mieux notes', fetch: (p) => api.discoverMovies('vote_average.desc', p) },
       { key: 'foryou', label: 'Pour toi', fetch: (p) => fetchForYou('movie', p) },
       { key: 'seen', label: 'Vus', local: (i) => i.type === 'movie' && !i.isAnime && isSeen(i) },
-      { key: 'fav', label: 'Favoris', local: (i) => i.type === 'movie' && !i.isAnime && i.favorite },
+      { key: 'fav', label: 'Mes notes', local: (i) => i.type === 'movie' && !i.isAnime && ratingOf(i) > 0, byRating: true },
     ],
   },
   series: {
@@ -491,7 +550,7 @@ const CATALOGS = {
       { key: 'top', label: 'Mieux notes', fetch: (p) => api.discoverTv('vote_average.desc', p) },
       { key: 'foryou', label: 'Pour toi', fetch: (p) => fetchForYou('tv', p) },
       { key: 'seen', label: 'Vues', local: (i) => i.type === 'tv' && !i.isAnime && isStarted(i) },
-      { key: 'fav', label: 'Favorites', local: (i) => i.type === 'tv' && !i.isAnime && i.favorite },
+      { key: 'fav', label: 'Mes notes', local: (i) => i.type === 'tv' && !i.isAnime && ratingOf(i) > 0, byRating: true },
     ],
   },
   anime: {
@@ -503,7 +562,7 @@ const CATALOGS = {
       { key: 'films', label: "Films d'animation", fetch: (p) => api.discoverAnimeMovies(p), type: 'movie' },
       { key: 'foryou', label: 'Pour toi', fetch: (p) => fetchForYou('anime', p) },
       { key: 'seen', label: 'Vus', local: (i) => i.isAnime && (i.type === 'movie' ? isSeen(i) : isStarted(i)) },
-      { key: 'fav', label: 'Favoris', local: (i) => i.isAnime && i.favorite },
+      { key: 'fav', label: 'Mes notes', local: (i) => i.isAnime && ratingOf(i) > 0, byRating: true },
     ],
   },
 };
@@ -525,14 +584,16 @@ async function fetchForYou(catalogType, page = 1) {
     return data;
   }
 
-  // Fallback : recommandations a partir des titres vus recemment
+  // Fallback : recommandations a partir des titres vus, les mieux notes
+  // d'abord. Un titre note "Bof" ou "Nul" ne sert jamais de point de depart.
   const watched = [...state.items.values()]
     .filter((i) => {
-      if (catalogType === 'anime') return i.isAnime && (i.plays > 0 || watchedEpisodeCount(i) > 0);
-      if (catalogType === 'movie') return i.type === 'movie' && !i.isAnime && i.plays > 0;
-      return i.type === 'tv' && !i.isAnime && watchedEpisodeCount(i) > 0;
+      if (ratingOf(i) && ratingOf(i) <= 2) return false;
+      if (catalogType === 'anime') return i.isAnime && (i.plays > 0 || watchedEpisodeCount(i) > 0 || ratingOf(i) >= 4);
+      if (catalogType === 'movie') return i.type === 'movie' && !i.isAnime && (i.plays > 0 || ratingOf(i) >= 4);
+      return i.type === 'tv' && !i.isAnime && (watchedEpisodeCount(i) > 0 || ratingOf(i) >= 4);
     })
-    .sort((a, b) => b.updatedAt - a.updatedAt)
+    .sort((a, b) => ratingOf(b) - ratingOf(a) || b.updatedAt - a.updatedAt)
     .slice(0, 8);
 
   if (!watched.length) {
@@ -603,8 +664,10 @@ export async function renderCatalog(name) {
       unbindScroll?.();
       const items = [...state.items.values()]
         .filter(current.local)
-        .sort((a, b) => b.updatedAt - a.updatedAt);
-      const count = items.length - (items.length % 3);
+        .sort((a, b) => (current.byRating ? ratingOf(b) - ratingOf(a) : 0) || b.updatedAt - a.updatedAt);
+      // Listes locales : tout afficher. L'arrondi au multiple de 3 (grilles
+      // TMDB) masquait ici de vrais titres - avec 2 notes, la page etait vide.
+      const count = items.length;
       if (!count) {
         grid.classList.add('grid--empty');
         grid.appendChild(emptyState('popcorn', tr('Rien ici pour le moment'), tr('Tes ajouts apparaitront ici.')));
@@ -785,7 +848,7 @@ export async function renderDetail(type, id) {
   function renderActions() {
     const it = getItem(type, d.id);
     const seen = it ? isSeen(it) : false;
-    const fav = it?.favorite;
+    const rating = ratingInfo(ratingOf(it));
     const wl = it?.watchlist;
     actions.innerHTML = '';
     actions.classList.toggle('detail-actions--3', !released);
@@ -817,11 +880,12 @@ export async function renderDetail(type, id) {
       btns.push(seenBtn);
     }
 
-    const favBtn = h(`<button class="act ${fav ? 'on-fav' : ''}"><span class="act-ico">${fav ? I.heartFill : I.heart}</span><span>${tr('Favori')}</span></button>`);
+    // Bouton de note (ex-favori) : tap = J'adore, appui long = choix de la note
+    const favBtn = h(`<button class="act act-rate ${rating ? `on-rate rate-${rating.key}` : ''}"><span class="act-ico">${rating ? rating.icon : I.heart}</span><span>${rating ? tr(rating.label) : tr("J'adore")}</span></button>`);
     const addBtn = h(`<button class="act ${wl ? 'on-list' : ''}"><span class="act-ico">${wl ? I.check : I.plus}</span><span>${wl ? tr('Ajoute') : tr('Ajouter')}</span></button>`);
     const plBtn = h(`<button class="act"><span class="act-ico">${I.list}</span><span>${tr('Playlist')}</span></button>`);
 
-    favBtn.addEventListener('click', async () => { await toggleFavorite(meta); renderActions(); });
+    bindRatingButton(favBtn, meta, () => renderActions());
     addBtn.addEventListener('click', async () => { await toggleAdd(meta); renderActions(); });
     plBtn.addEventListener('click', () => openPlaylistSheet(meta));
 
@@ -1354,11 +1418,12 @@ export function renderWatchlist() {
   const prefs = loadListPrefs('watchlist');
   let filter = prefs.filter || 'all';
   let sort = prefs.sort || 'recent';
+  let rating = prefs.rating || 'all';
 
   const holder = h('<div></div>');
 
   function persist() {
-    saveListPrefs('watchlist', { filter, sort });
+    saveListPrefs('watchlist', { filter, sort, rating });
   }
 
   function renderGroup(items) {
@@ -1379,10 +1444,7 @@ export function renderWatchlist() {
       list.appendChild(mediaListRow(it, {
         btnIcon: I.x,
         onBtn: async () => {
-          it.watchlist = false;
-          await saveItem(it);
-          toast(tr('Retire de la watchlist'));
-          draw();
+          if (await removeFromList(it)) draw();
         },
       }));
     }
@@ -1395,11 +1457,15 @@ export function renderWatchlist() {
     if (filter === 'movie') items = items.filter((i) => i.type === 'movie' && !i.isAnime);
     if (filter === 'tv') items = items.filter((i) => i.type === 'tv' && !i.isAnime);
     if (filter === 'anime') items = items.filter((i) => i.isAnime);
+    items = items.filter((i) => matchRating(i, rating));
     items = sortListItems(items, sort);
+    markFilterActive(typeChips, rating);
 
     const any = renderByStatus(holder, items, itemStatus, renderGroup);
     if (!any) {
-      holder.appendChild(emptyState('bookmark', tr('Liste vide'), tr('Ajoute des titres avec le bouton + sur les affiches.')));
+      holder.appendChild(rating !== 'all'
+        ? emptyState('bookmark', tr('Aucun titre avec cette note'), tr('Change le filtre de note pour tout revoir.'))
+        : emptyState('bookmark', tr('Liste vide'), tr('Ajoute des titres avec le bouton + sur les affiches.')));
     }
   }
 
@@ -1411,10 +1477,11 @@ export function renderWatchlist() {
     onFilter: () => {
       const all = [...state.items.values()].filter((i) => i.watchlist);
       openListFilterSheet({
-        prefs: { filter, sort },
+        prefs: { filter, sort, rating },
         showChrono: looksLikeMcu(all),
         onApply: (p) => {
           sort = p.sort || 'recent';
+          rating = p.rating || 'all';
           persist();
           draw();
         },
@@ -1437,7 +1504,7 @@ function mediaListRow(it, { btnIcon, onBtn, sub } = {}) {
         ${src ? `<img src="${src}" alt="" loading="lazy">` : `<span class="no-img">${esc(it.title)}</span>`}
       </a>
       <a class="inf" href="#/detail/${it.type}/${it.tmdbId}">
-        <div class="t">${esc(it.title)}</div>
+        <div class="t">${ratingBadge(ratingOf(getItem(it.type, it.tmdbId)), 'badge-inline')}${esc(it.title)}</div>
         <div class="s">${esc(sub ?? [typeLabel(it.type, it.isAnime), it.year].filter(Boolean).join(' - '))}</div>
       </a>
       ${btnIcon ? `<button class="row-btn" aria-label="Retirer">${btnIcon}</button>` : ''}
@@ -1567,9 +1634,10 @@ export function renderPlaylist(id) {
   const prefs = loadListPrefs('playlist_' + id);
   let filter = prefs.filter || 'all';
   let sort = prefs.sort || 'recent';
+  let rating = prefs.rating || 'all';
 
   function persist() {
-    saveListPrefs('playlist_' + id, { filter, sort });
+    saveListPrefs('playlist_' + id, { filter, sort, rating });
   }
 
   function renderGroup(entries) {
@@ -1606,10 +1674,13 @@ export function renderPlaylist(id) {
     if (filter === 'movie') entries = entries.filter((e) => e.type === 'movie' && !state.items.get(e.id)?.isAnime);
     if (filter === 'tv') entries = entries.filter((e) => e.type === 'tv' && !state.items.get(e.id)?.isAnime);
     if (filter === 'anime') entries = entries.filter((e) => state.items.get(e.id)?.isAnime);
+    entries = entries.filter((e) => matchRating(state.items.get(e.id), rating));
+    markFilterActive(typeChips, rating);
     entries = sortListItems(
       entries.map((e) => ({
         ...e,
         updatedAt: state.items.get(e.id)?.updatedAt || 0,
+        rating: ratingOf(state.items.get(e.id)),
       })),
       sort
     );
@@ -1628,10 +1699,11 @@ export function renderPlaylist(id) {
     onFilter: () => {
       const nameHint = /marvel|mcu/i.test(pl.name || '');
       openListFilterSheet({
-        prefs: { filter, sort },
+        prefs: { filter, sort, rating },
         showChrono: nameHint || looksLikeMcu(pl.items),
         onApply: (p) => {
           sort = p.sort || 'recent';
+          rating = p.rating || 'all';
           persist();
           draw();
         },
@@ -1660,7 +1732,7 @@ export function renderProfile() {
       <a class="stat hl" href="#/library/series-followed"><div class="v">${s.tvStarted.length}</div><div class="l">${tr('Series suivies')}</div></a>
       <a class="stat gr" href="#/stats"><div class="v">${s.epsSeen}</div><div class="l">${tr('Episodes vus')}</div></a>
       <a class="stat gr" href="#/stats"><div class="v">${s.rewatches}</div><div class="l">${tr('Revisionnages')}</div></a>
-      <a class="stat" href="#/library/favorites"><div class="v">${s.favs.length}</div><div class="l">${tr('Favoris')}</div></a>
+      <a class="stat" href="#/library/rated"><div class="v">${s.rated.length}</div><div class="l">${tr('Mes notes')}</div></a>
       <a class="stat" href="#/playlists"><div class="v">${state.playlists.size}</div><div class="l">${tr('Playlists')}</div></a>
     </div>
   `);
@@ -1671,6 +1743,7 @@ export function renderProfile() {
 
   const links = [
     ['bookmark', tr('Ma liste'), () => (location.hash = '#/watchlist')],
+    ['dice', tr('Au hasard'), () => (location.hash = '#/random')],
     ['list', tr('Mes playlists'), () => (location.hash = '#/playlists')],
     ['heart', tr('Acteurs favoris'), () => (location.hash = '#/people')],
     ['popcorn', tr('Mes statistiques'), () => (location.hash = '#/stats')],
@@ -1721,7 +1794,11 @@ export function renderProfile() {
 
 /* ============================== RECHERCHE ============================== */
 
-export function renderSearch() {
+// Derniere recherche saisie : relue quand on revient sur la page de recherche
+// par un retour arriere et que sa page n'est plus en cache (app.js).
+const SEARCH_Q_KEY = 'bobine_search_q';
+
+export function renderSearch({ restore = false } = {}) {
   const v = $view();
   v.innerHTML = '';
   const page = h('<div class="page search-page"></div>');
@@ -1808,8 +1885,13 @@ export function renderSearch() {
     }
   }
 
+  function remember() {
+    try { sessionStorage.setItem(SEARCH_Q_KEY, input.value); } catch { /* quota */ }
+  }
+
   function clearSearch() {
     input.value = '';
+    remember();
     syncClear();
     ++seq;
     loadSuggestions();
@@ -1819,6 +1901,7 @@ export function renderSearch() {
   clearBtn.addEventListener('click', clearSearch);
   input.addEventListener('input', () => {
     syncClear();
+    remember();
     clearTimeout(timer);
     timer = setTimeout(() => run(input.value), 350);
   });
@@ -1826,7 +1909,16 @@ export function renderSearch() {
     if (e.key === 'Enter') { clearTimeout(timer); run(input.value); input.blur(); }
   });
 
-  // Toujours repartir a zero a l'ouverture
+  // Nouvelle ouverture : page vierge, clavier ouvert. Retour arriere : on
+  // reprend la recherche la ou on l'avait laissee, sans rouvrir le clavier.
+  const previous = restore ? (sessionStorage.getItem(SEARCH_Q_KEY) || '') : '';
+  if (previous.trim()) {
+    input.value = previous;
+    syncClear();
+    run(previous);
+    return;
+  }
+  remember();
   syncClear();
   loadSuggestions();
   setTimeout(() => input.focus(), 80);
@@ -1876,7 +1968,7 @@ export async function renderStats() {
         <div class="stat"><div class="v">${animeMovies}</div><div class="l">${tr('Films anime vus')}</div></div>
         <div class="stat"><div class="v">${animeEps}</div><div class="l">${tr('Ep. anime vus')}</div></div>
         <div class="stat"><div class="v">${s.rewatches}</div><div class="l">${tr('Revisionnages')}</div></div>
-        <div class="stat"><div class="v">${s.favs.length}</div><div class="l">${tr('Favoris')}</div></div>
+        <div class="stat"><div class="v">${s.favs.length}</div><div class="l">${tr("J'adore")}</div></div>
       </div>
     </div>
   `));
@@ -1898,12 +1990,15 @@ const LIBRARY_CFG = {
       return `${p.watched} ep.${p.total ? ' / ' + p.total : ''}`;
     },
   },
-  favorites: {
-    title: 'Favoris',
-    filter: (i) => i.favorite,
+  rated: {
+    title: 'Mes notes',
+    filter: (i) => ratingOf(i) > 0,
     sub: (i) => [typeLabel(i.type, i.isAnime), i.year].filter(Boolean).join(' - '),
+    byRating: true,
   },
 };
+// Ancienne adresse (favoris) : meme page, pre-filtree sur J'adore.
+LIBRARY_CFG.favorites = { ...LIBRARY_CFG.rated, defaultRating: 5 };
 
 export function renderLibrary(name) {
   const cfg = LIBRARY_CFG[name];
@@ -1924,14 +2019,35 @@ export function renderLibrary(name) {
 
   page.querySelector('.head-actions').prepend(viewToggle(() => draw()));
 
+  // Page des notes : filtres par type et par note, memorises pour la session
+  let filter = 'all';
+  let rating = 'all';
+  if (cfg.byRating) {
+    const prefs = loadListPrefs('library_' + name);
+    filter = prefs.filter || 'all';
+    rating = prefs.rating || cfg.defaultRating || 'all';
+    const persist = () => saveListPrefs('library_' + name, { filter, rating });
+    const types = typeFilterBar(filter, (f) => { filter = f; persist(); draw(); });
+    types.querySelector('.chip-filter')?.remove();
+    const rates = ratingFilterChips(rating, (v) => { rating = v; persist(); draw(); }, { withNone: false });
+    page.insertBefore(types, holder);
+    page.insertBefore(rates, holder);
+  }
+
   function draw() {
     holder.innerHTML = '';
-    const items = [...state.items.values()]
-      .filter(cfg.filter)
-      .sort((a, b) => b.updatedAt - a.updatedAt);
+    let items = [...state.items.values()].filter(cfg.filter);
+    if (filter === 'movie') items = items.filter((i) => i.type === 'movie' && !i.isAnime);
+    if (filter === 'tv') items = items.filter((i) => i.type === 'tv' && !i.isAnime);
+    if (filter === 'anime') items = items.filter((i) => i.isAnime);
+    items = items
+      .filter((i) => matchRating(i, rating))
+      .sort((a, b) => (cfg.byRating ? ratingOf(b) - ratingOf(a) : 0) || b.updatedAt - a.updatedAt);
 
     if (!items.length) {
-      holder.appendChild(emptyState('popcorn', tr('Rien ici pour le moment'), tr('Tes ajouts apparaitront ici.')));
+      holder.appendChild(cfg.byRating
+        ? emptyState('heart', tr('Aucun titre note ici'), tr('Sur une fiche, touche le coeur pour J\'adore, ou reste appuye pour choisir une note.'))
+        : emptyState('popcorn', tr('Rien ici pour le moment'), tr('Tes ajouts apparaitront ici.')));
       return;
     }
 

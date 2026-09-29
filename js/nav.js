@@ -40,8 +40,19 @@ export function stampHistory() {
   return 'forward';
 }
 
-// Fige la borne du retour arriere sur l'entree courante.
-export function markFirst() { first = index; }
+// Fige la borne du retour arriere. Elle est gardee en sessionStorage, qui
+// survit a un rechargement (mise a jour de l'app, iOS qui recharge la PWA
+// revenue au premier plan) comme l'historique lui-meme. Avant, la borne
+// etait reposee sur la page courante a chaque rechargement : le retour
+// suivant croyait etre au debut et renvoyait a l'accueil au lieu de la page
+// precedente.
+const FIRST_KEY = 'bobine_nav_first';
+export function markFirst() {
+  let saved = 0;
+  try { saved = Number(sessionStorage.getItem(FIRST_KEY)) || 0; } catch { /* indisponible */ }
+  first = saved && saved <= index ? saved : index;
+  try { sessionStorage.setItem(FIRST_KEY, String(first)); } catch { /* quota */ }
+}
 
 // Vrai s'il reste une page de l'app derriere celle affichee.
 export const canGoBack = () => index > first;

@@ -24,6 +24,7 @@ export function buildDeskbar() {
         </nav>
       </div>
       <div class="deskbar-right">
+        <a class="dicon" href="#/random" data-hash="#/random" aria-label="${tr('Au hasard')}">${I.dice}</a>
         <a class="dicon" href="#/watchlist" data-hash="#/watchlist" aria-label="${tr('Watchlist')}">${I.bookmark}</a>
         <a class="dicon" href="#/search" data-hash="#/search" aria-label="${tr('Rechercher')}">${I.search}</a>
         <a class="dicon" href="#/profile" data-hash="#/profile" aria-label="${tr('Profil')}">${I.user}</a>

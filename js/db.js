@@ -1,5 +1,6 @@
 // Base locale (IndexedDB) - tout reste sur l'appareil.
 // Stores : items (films/series suivis), playlists.
+import { normalizeRating } from './ratings.js';
 
 const DB_NAME = 'bobine';
 const DB_VERSION = 2;
@@ -145,7 +146,7 @@ export async function replaceAll(items, playlists, people) {
   state.items.clear();
   state.playlists.clear();
   state.people.clear();
-  for (const it of items || []) state.items.set(it.id, it);
+  for (const it of items || []) { normalizeRating(it); state.items.set(it.id, it); }
   for (const pl of playlists || []) state.playlists.set(pl.id, pl);
   for (const p of people || []) state.people.set(p.id, p);
   try {
@@ -184,10 +185,14 @@ function mergeItem(local, remote) {
   }
   merged.episodes = eps;
   merged.plays = Math.max(local.plays || 0, remote.plays || 0);
+  // Note : celle de la version la plus recente. Une version sans `rating`
+  // (donnees d'avant les notes) retombe sur son ancien favori.
+  merged.rating = newest.rating !== undefined ? newest.rating : (newest.favorite ? 5 : 0);
   merged.favorite = newest.favorite;
   merged.watchlist = newest.watchlist;
   merged.addedAt = Math.min(local.addedAt || Infinity, remote.addedAt || Infinity) || Date.now();
   merged.updatedAt = Math.max(local.updatedAt || 0, remote.updatedAt || 0);
+  normalizeRating(merged);
   return merged;
 }
 
@@ -197,7 +202,7 @@ function itemSig(it) {
   if (!it) return '';
   const eps = Object.keys(it.episodes || {}).sort()
     .map((k) => k + ':' + it.episodes[k]).join(',');
-  return `${it.plays || 0}|${it.favorite ? 1 : 0}|${it.watchlist ? 1 : 0}|${eps}`;
+  return `${it.plays || 0}|${it.rating || 0}|${it.watchlist ? 1 : 0}|${eps}`;
 }
 
 export async function mergeAll(items, playlists, people) {
@@ -206,6 +211,7 @@ export async function mergeAll(items, playlists, people) {
   for (const remote of items || []) {
     if (!remote?.id) continue;
     const local = state.items.get(remote.id);
+    if (!local) normalizeRating(remote);
     const merged = mergeItem(local, remote);
     if (itemSig(local) !== itemSig(merged)) changed++;
     state.items.set(merged.id, merged);
@@ -250,6 +256,7 @@ async function reconcileBackup() {
   let restored = 0;
   for (const it of bak.items || []) {
     if (!state.items.has(it.id)) {
+      normalizeRating(it);
       state.items.set(it.id, it);
       await idbPutSafe('items', it);
       restored++;
@@ -289,12 +296,19 @@ export async function loadState() {
   for (const pl of playlists) state.playlists.set(pl.id, pl);
   for (const p of people) state.people.set(p.id, p);
   await reconcileBackup();
+  // Migration favoris -> notes (une seule fois par item, puis idempotente).
+  // Pas de touch() : ce n'est pas une modification de l'utilisateur, elle ne
+  // doit pas faire gagner cet appareil lors de la prochaine synchro.
+  for (const it of state.items.values()) {
+    if (normalizeRating(it)) await idbPutSafe('items', it);
+  }
   syncBackup();
 }
 
 // ---- Items ----
 // item = { id, type: 'movie'|'tv', tmdbId, title, poster, backdrop, year,
-//          isAnime, favorite, watchlist, plays, episodes: {'s:e': n},
+//          isAnime, rating (0-5), favorite (= rating 5, miroir pour les
+//          anciennes versions), watchlist, plays, episodes: {'s:e': n},
 //          seasonEpisodeTotals: {s: n}, episodeTotal, addedAt, updatedAt }
 
 export const itemId = (type, tmdbId) => `${type}_${tmdbId}`;
@@ -316,6 +330,7 @@ export function ensureItem(meta) {
       backdrop: meta.backdrop || null,
       year: meta.year || '',
       isAnime: !!meta.isAnime,
+      rating: 0,
       favorite: false,
       watchlist: false,
       plays: 0,
@@ -346,6 +361,7 @@ function inAnyPlaylist(id) {
 
 function isBlank(it) {
   return (
+    !it.rating &&
     !it.favorite &&
     !it.watchlist &&
     it.plays === 0 &&
@@ -435,7 +451,8 @@ export function computeStats() {
   const tvStarted = items.filter((i) => i.type === 'tv' && watchedEpisodeCount(i) > 0);
   const epsSeen = tvStarted.reduce((a, i) => a + watchedEpisodeCount(i), 0);
   const epPlays = tvStarted.reduce((a, i) => a + totalEpisodePlays(i), 0);
-  const favs = items.filter((i) => i.favorite);
+  const favs = items.filter((i) => i.rating === 5);
+  const rated = items.filter((i) => i.rating > 0);
   const animes = items.filter((i) => i.isAnime && (i.plays > 0 || watchedEpisodeCount(i) > 0));
   const totalMinutes = items.reduce((a, i) => a + itemWatchMinutes(i), 0);
   const movieMinutes = moviesSeen.reduce((a, i) => a + movieWatchMinutes(i), 0);
@@ -443,7 +460,7 @@ export function computeStats() {
   const animeMinutes = animes.reduce((a, i) => a + itemWatchMinutes(i), 0);
   const rewatches = (moviePlays - moviesSeen.length) + (epPlays - epsSeen);
   return {
-    moviesSeen, moviePlays, tvStarted, epsSeen, epPlays, favs,
+    moviesSeen, moviePlays, tvStarted, epsSeen, epPlays, favs, rated,
     animes, totalMinutes, movieMinutes, tvMinutes, animeMinutes, rewatches,
   };
 }
@@ -554,6 +571,7 @@ export async function importJson(text) {
     throw new Error('Fichier non reconnu');
   }
   for (const it of data.items) {
+    normalizeRating(it);
     state.items.set(it.id, it);
     await idbPutSafe('items', it);
   }

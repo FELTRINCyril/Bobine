@@ -2,6 +2,7 @@
 import { img } from './api.js';
 import { tr } from './i18n.js';
 import { getItem, isSeen, isStarted, tvProgress, totalEpisodePlays } from './db.js';
+import { ratingOf, ratingInfo } from './ratings.js';
 
 // ---- Icones (SVG inline, traits 2px) ----
 
@@ -41,6 +42,7 @@ export const I = {
   moon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.5 14.5A8.5 8.5 0 0 1 9.5 3.5a8.5 8.5 0 1 0 11 11Z"/></svg>',
   globe: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.7 2.6 4 5.6 4 9s-1.3 6.4-4 9c-2.7-2.6-4-5.6-4-9s1.3-6.4 4-9Z"/></svg>',
   sliders: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M5 6.5h6M15 6.5h4M5 12h2M11 12h8M5 17.5h9M18 17.5h1"/><circle cx="13" cy="6.5" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="16" cy="17.5" r="2"/></svg>',
+  dice: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="3.5" width="17" height="17" rx="4"/><path d="M8.5 8.5h.01M15.5 8.5h.01M12 12h.01M8.5 15.5h.01M15.5 15.5h.01" stroke-width="3"/></svg>',
   info: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 10v6M12 7h.01"/></svg>',
 };
 
@@ -91,7 +93,8 @@ export function posterCard(media, opts = {}) {
   const it = getItem(type, id);
 
   let badges = '';
-  if (it?.favorite) badges += `<span class="badge badge-fav">${I.heartFill}</span>`;
+  const rating = ratingOf(it);
+  if (rating) badges += ratingBadge(rating);
   if (it && isSeen(it)) {
     const plays = it.type === 'movie' ? it.plays : 0;
     badges += `<span class="badge badge-seen">${plays > 1 ? 'x' + plays : tr('VU')}</span>`;
@@ -138,6 +141,13 @@ export function posterCard(media, opts = {}) {
       ${sub ? `<div class="card-sub">${esc(sub)}</div>` : ''}
     </a>
   `);
+}
+
+// Pastille de note (coin haut gauche des affiches, lignes de liste).
+export function ratingBadge(value, extraClass = '') {
+  const r = ratingInfo(value);
+  if (!r) return '';
+  return `<span class="badge badge-rate rate-${r.key} ${extraClass}" aria-label="${esc(r.label)}">${r.icon}</span>`;
 }
 
 // ---- Carte acteur ----
@@ -199,7 +209,10 @@ function isAnimeLike(media) {
 
 // ---- Sheet (panneau bas) ----
 
-export function openSheet(contentEl) {
+// onClose : appele quand l'utilisateur ferme le panneau en touchant le voile
+// (sans passer par un bouton). Sans ca, une question posee dans un panneau
+// restait sans reponse et la promesse de l'appelant pendante pour toujours.
+export function openSheet(contentEl, { onClose } = {}) {
   const root = document.getElementById('overlay-root');
   const veil = h('<div class="sheet-veil"></div>');
   const sheet = h('<div class="sheet" role="dialog"><div class="grab"></div></div>');
@@ -209,7 +222,10 @@ export function openSheet(contentEl) {
     veil.remove();
     sheet.remove();
   };
-  veil.addEventListener('click', close);
+  veil.addEventListener('click', () => {
+    close();
+    onClose?.();
+  });
   return close;
 }
 

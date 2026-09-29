@@ -1,11 +1,13 @@
-// Actions sur les items (favori, bibliotheque, vus, playlists)
+// Actions sur les items (note, bibliotheque, vus, playlists)
 import {
-  ensureItem, saveItem, getItem, state,
+  ensureItem, saveItem, getItem, state, isSeen, isStarted,
   createPlaylist, savePlaylist,
 } from './db.js';
 import { api } from './api.js';
 import { h, esc, I, openSheet, toast } from './ui.js';
 import { tr } from './i18n.js';
+import { openAskSheet } from './confirm.js';
+import { RATINGS, ratingOf, ratingLabel } from './ratings.js';
 
 // meta = { type, tmdbId, title, poster, backdrop, year, isAnime }
 
@@ -23,13 +25,40 @@ export async function ensureInLibrary(meta) {
   return it;
 }
 
+// Retirer un titre de la liste se fait en un geste (bouton "Ajoute", coche
+// d'une affiche, croix en vue liste) : un tap distrait faisait disparaitre un
+// titre deja vu. On demande donc confirmation, en le disant clairement
+// quand le titre a deja ete vu ou note.
+export function confirmRemoveFromList(it) {
+  const seen = it && (isSeen(it) || isStarted(it) || (it.plays || 0) > 0);
+  const rated = ratingOf(it) > 0;
+  let message = tr('Il disparaitra de Ma liste.');
+  if (seen) message = tr('Tu as deja vu ce titre. Il disparaitra de Ma liste, mais tes visionnages et ta note sont conserves.');
+  else if (rated) message = tr('Il disparaitra de Ma liste, mais ta note est conservee.');
+  return openAskSheet({
+    title: `${tr('Retirer')} "${it?.title || ''}" ?`,
+    message,
+    confirmLabel: tr('Retirer'),
+    cancelLabel: tr('Annuler'),
+    danger: true,
+  });
+}
+
+// Retire de la liste apres confirmation. Retourne true si retire.
+export async function removeFromList(it) {
+  if (!it?.watchlist) return false;
+  if (!(await confirmRemoveFromList(it))) return false;
+  it.watchlist = false;
+  await saveItem(it);
+  toast(tr('Retire de ma liste'));
+  return true;
+}
+
 export async function toggleAdd(meta) {
   const it = ensureItem(meta);
   if (it.watchlist) {
-    it.watchlist = false;
-    await saveItem(it);
-    toast(tr('Retire de ma liste'));
-    return false;
+    await removeFromList(it);
+    return !!it.watchlist;
   }
   it.watchlist = true;
   await saveItem(it);
@@ -37,16 +66,157 @@ export async function toggleAdd(meta) {
   return true;
 }
 
-/** @deprecated utilise toggleAdd */
-export const toggleWatchlist = toggleAdd;
+// ---- Notes ----
 
-export async function toggleFavorite(meta) {
+// rating : 1..5, ou 0 pour retirer la note.
+export async function setRating(meta, rating) {
   const it = ensureItem(meta);
-  it.favorite = !it.favorite;
-  if (it.favorite) await ensureInLibrary(meta);
-  else await saveItem(it);
-  toast(it.favorite ? tr('Ajoute aux favoris') : tr('Retire des favoris'));
-  return it.favorite;
+  const r = RATINGS.some((x) => x.value === rating) ? rating : 0;
+  it.rating = r;
+  it.favorite = r === 5;
+  // Comme l'ancien favori : noter un titre le range dans la bibliotheque.
+  // Sauvegarde dans tous les cas : ensureInLibrary n'ecrit rien quand le
+  // titre est deja dans la liste, la note aurait ete perdue.
+  if (r) it.watchlist = true;
+  await saveItem(it);
+  toast(r ? `${tr('Note :')} ${ratingLabel(r)}` : tr('Note retiree'));
+  return r;
+}
+
+// Selecteur de note, en bulle au-dessus du bouton `anchor`.
+// Deux facons de choisir : toucher une option, ou (apres un appui long)
+// glisser le doigt jusqu'a une option et relacher. Resout la note choisie,
+// 0 pour "retirer", ou null si on ferme sans choisir.
+export function openRatingPicker(anchor, current = 0) {
+  const root = document.getElementById('overlay-root');
+  const veil = h('<div class="rate-veil"></div>');
+  const pop = h(`
+    <div class="rate-pop" role="dialog" aria-label="${tr('Noter')}">
+      <div class="rate-opts">
+        ${RATINGS.map((r) => `
+          <button type="button" class="rate-opt rate-${r.key} ${r.value === current ? 'on' : ''}" data-v="${r.value}" aria-label="${esc(tr(r.label))}">
+            <span class="rate-ico">${r.icon}</span>
+          </button>`).join('')}
+      </div>
+      <div class="rate-caption">${current ? esc(ratingLabel(current)) : tr('Reste appuye et glisse, ou touche')}</div>
+      ${current ? `<button type="button" class="rate-clear" data-v="0">${I.x}<span>${tr('Retirer la note')}</span></button>` : ''}
+    </div>
+  `);
+  root.append(veil, pop);
+
+  // Placement : centre sur le bouton, au-dessus si la place le permet.
+  const a = anchor.getBoundingClientRect();
+  const w = pop.offsetWidth;
+  const hgt = pop.offsetHeight;
+  const left = Math.min(Math.max(8, a.left + a.width / 2 - w / 2), window.innerWidth - w - 8);
+  const top = a.top - hgt - 10 > 8 ? a.top - hgt - 10 : a.bottom + 10;
+  pop.style.left = `${left}px`;
+  pop.style.top = `${top}px`;
+  requestAnimationFrame(() => pop.classList.add('in'));
+
+  const caption = pop.querySelector('.rate-caption');
+  let hover = null;
+  const setHover = (btn) => {
+    if (btn === hover) return;
+    hover?.classList.remove('hover');
+    hover = btn;
+    if (btn) {
+      btn.classList.add('hover');
+      caption.textContent = Number(btn.dataset.v) ? ratingLabel(btn.dataset.v) : tr('Retirer la note');
+    }
+  };
+
+  let done;
+  const result = new Promise((resolve) => { done = resolve; });
+  const finish = (value) => {
+    veil.remove();
+    pop.remove();
+    done(value);
+  };
+
+  veil.addEventListener('click', () => finish(null));
+  pop.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-v]');
+    if (b) finish(Number(b.dataset.v));
+  });
+
+  // Suivi du doigt reste pose apres l'appui long (appele par bindRatingButton)
+  const track = (x, y) => {
+    const el = document.elementFromPoint(x, y);
+    setHover(el?.closest?.('.rate-pop [data-v]') || null);
+  };
+  const release = () => {
+    if (hover) finish(Number(hover.dataset.v));
+  };
+  return { result, track, release };
+}
+
+// Bouton de note : un tap sur un titre non note = J'adore (le geste de
+// l'ancien favori) ; un tap sur un titre deja note ouvre le selecteur, pour
+// ne jamais perdre une note par megarde ; un appui long l'ouvre toujours.
+// onChange(rating) est appele apres chaque modification.
+const LONG_MS = 420;
+const HINT_KEY = 'bobine_rate_hint';
+
+export function bindRatingButton(btn, meta, onChange) {
+  let timer = null;
+  let picker = null;
+  let longFired = false;
+  let startXY = null;
+
+  const current = () => ratingOf(getItem(meta.type, meta.tmdbId));
+
+  const apply = async (value) => {
+    if (value === null || value === undefined) return;
+    if (value === current()) return;
+    await setRating(meta, value);
+    onChange?.(value);
+  };
+
+  const openPicker = () => {
+    picker = openRatingPicker(btn, current());
+    picker.result.then((v) => { picker = null; apply(v); });
+  };
+
+  btn.addEventListener('contextmenu', (e) => e.preventDefault());
+
+  btn.addEventListener('pointerdown', (e) => {
+    if (e.button !== undefined && e.button !== 0) return;
+    longFired = false;
+    startXY = { x: e.clientX, y: e.clientY };
+    clearTimeout(timer);
+    timer = setTimeout(() => {
+      longFired = true;
+      try { navigator.vibrate?.(12); } catch { /* ignore */ }
+      openPicker();
+    }, LONG_MS);
+  });
+
+  btn.addEventListener('pointermove', (e) => {
+    if (!longFired && startXY && Math.hypot(e.clientX - startXY.x, e.clientY - startXY.y) > 12) {
+      clearTimeout(timer); // le doigt part ailleurs : ce n'est pas un appui long
+    }
+    if (longFired && picker) picker.track(e.clientX, e.clientY);
+  });
+
+  const end = () => {
+    clearTimeout(timer);
+    if (longFired && picker) picker.release();
+  };
+  btn.addEventListener('pointerup', end);
+  btn.addEventListener('pointercancel', () => clearTimeout(timer));
+
+  btn.addEventListener('click', async (e) => {
+    e.preventDefault();
+    if (longFired) { longFired = false; return; } // deja gere par l'appui long
+    if (picker) return;
+    if (current()) { openPicker(); return; }
+    await apply(5);
+    if (!localStorage.getItem(HINT_KEY)) {
+      try { localStorage.setItem(HINT_KEY, '1'); } catch { /* quota */ }
+      setTimeout(() => toast(tr('Astuce : reste appuye pour choisir une autre note')), 900);
+    }
+  });
 }
 
 export async function setMoviePlays(meta, plays) {

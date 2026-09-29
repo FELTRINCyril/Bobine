@@ -423,6 +423,63 @@ const EN = {
   'Dans la console Google Cloud, ajoute cette adresse aux URI de redirection autorisees du client OAuth :':
     'In the Google Cloud console, add this address to the OAuth client authorized redirect URIs:',
 
+  // Notes personnelles
+  "J'adore": 'Loved it',
+  "J'aime": 'Liked it',
+  'Ca passe': "It's OK",
+  'Bof': 'Meh',
+  'Nul': 'Hated it',
+  'Noter': 'Rate',
+  'Reste appuye et glisse, ou touche': 'Hold and slide, or tap',
+  'Retirer la note': 'Remove rating',
+  'Note :': 'Rating:',
+  'Note retiree': 'Rating removed',
+  'Astuce : reste appuye pour choisir une autre note': 'Tip: press and hold to pick another rating',
+  'Mes notes': 'My ratings',
+  'Ma note': 'My rating',
+  'Toutes': 'All',
+  'Non notes': 'Unrated',
+  'Aucun titre avec cette note': 'No title with this rating',
+  'Change le filtre de note pour tout revoir.': 'Change the rating filter to see everything again.',
+  'Aucun titre note ici': 'No rated title here',
+  "Sur une fiche, touche le coeur pour J'adore, ou reste appuye pour choisir une note.":
+    'On a title page, tap the heart for Loved it, or press and hold to pick a rating.',
+
+  // Retrait de la liste
+  'Retirer': 'Remove',
+  'Il disparaitra de Ma liste.': 'It will disappear from My list.',
+  'Tu as deja vu ce titre. Il disparaitra de Ma liste, mais tes visionnages et ta note sont conserves.':
+    'You have already watched this title. It will disappear from My list, but your views and rating are kept.',
+  'Il disparaitra de Ma liste, mais ta note est conservee.': 'It will disappear from My list, but your rating is kept.',
+
+  // Au hasard
+  'Au hasard': 'Random pick',
+  'Je ne sais pas quoi regarder': "I don't know what to watch",
+  'Tirer un titre au hasard, dans ta liste ou selon tes gouts': 'Pick a title at random, from your list or based on your taste',
+  'Tu ne sais pas quoi regarder ? Laisse Bobine choisir.': "Don't know what to watch? Let Bobine choose.",
+  'Pour moi': 'For me',
+  'Surprise': 'Surprise',
+  'Un titre que tu as mis de cote': 'Something you saved for later',
+  "D'apres ce que tu as aime": 'Based on what you liked',
+  'Un titre bien note, au hasard': 'A well-rated title, at random',
+  'Inclure les titres deja vus': 'Include titles already watched',
+  'Tirer au sort': 'Pick for me',
+  'Parce que tu as note': 'Because you rated',
+  'Parce que tu as vu': 'Because you watched',
+  'Avec': 'With',
+  'Rien a tirer dans Ma liste': 'Nothing to pick in My list',
+  'Ajoute des titres a ta liste avec le bouton +.': 'Add titles to your list with the + button.',
+  'Tout est deja vu ici. Coche "Inclure les titres deja vus" ou change de type.':
+    'Everything here is already watched. Tick "Include titles already watched" or change the type.',
+  'Note quelques titres (coeur sur une fiche) pour des suggestions plus justes. En attendant, voici une surprise.':
+    'Rate a few titles (heart on a title page) for better suggestions. Meanwhile, here is a surprise.',
+  'Aucun titre trouve': 'No title found',
+  'Essaie un autre type ou une autre source.': 'Try another type or source.',
+  'Un autre': 'Another one',
+  'Dans ma liste': 'In my list',
+  'Ajouter a ma liste': 'Add to my list',
+  'Retirer de ma liste': 'Remove from my list',
+
   // Divers
   'sur': 'of',
   'Remonter en haut': 'Back to top',
