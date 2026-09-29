@@ -311,16 +311,36 @@ function bindQuickActions() {
 //    et un seul retour peut partir tant que le precedent n'est pas arrive ;
 //  - dans Safari (hors app installee), le navigateur fait deja ce geste :
 //    le doubler provoquait aussi un double retour. Actif en mode app seulement.
+//
+// Piege n°1, decouvert tard : iOS fournit LUI-MEME ce geste dans les apps
+// ajoutees a l'ecran d'accueil. Le notre s'y ajoutait, et un seul
+// glissement reculait de DEUX pages (fiche ouverte depuis Films -> retour sur
+// Series, l'onglet d'avant), voire se chevauchait avec celui d'iOS (ecran
+// fige). On ne peut pas le savoir a l'avance : on attend donc un court
+// instant apres le geste. Si iOS a recule pendant ce temps, on le memorise
+// et notre geste est desactive definitivement ; sinon, on recule nous-memes.
+const NATIVE_SWIPE_KEY = 'bobine_native_swipe';
+const NATIVE_WAIT_MS = 450;
+
 function bindEdgeSwipeBack() {
   const standalone = window.navigator.standalone === true
     || window.matchMedia?.('(display-mode: standalone)').matches;
   if (!standalone && !/[?&]swipe=1/.test(location.search)) return;
+  if (localStorage.getItem(NATIVE_SWIPE_KEY) === '1') return;
+
+  // Derniere navigation d'historique NON declenchee par nous (geste d'iOS).
+  let lastPopAt = 0;
+  let selfBackAt = 0;
+  window.addEventListener('popstate', () => {
+    if (Date.now() - selfBackAt > 300) lastPopAt = Date.now();
+  });
 
   const EDGE = 28;        // largeur de la zone sensible, en px
   const DIST = 70;        // course minimale
   const DUREE_MAX = 900;  // au-dela, c'est une manipulation, pas un geste
   let start = null;
   let lockUntil = 0;      // un seul retour a la fois
+  let disabled = false;   // geste natif detecte en cours de session
 
   const sheetOuverte = () => document.getElementById('overlay-root').children.length > 0;
 
@@ -348,6 +368,7 @@ function bindEdgeSwipeBack() {
 
   window.addEventListener('touchstart', (e) => {
     start = null;
+    if (disabled) return;
     if (e.touches.length !== 1) return;          // pincement / multi-touch
     if (Date.now() < lockUntil) return;
     const t = e.touches[0];
@@ -379,9 +400,21 @@ function bindEdgeSwipeBack() {
     const dy = Math.abs(t.clientY - s.y);
     if (dx < DIST) return;
     if (dy > 80 || dy > dx * 0.7) return;         // trajectoire trop verticale
-    lockUntil = Date.now() + 700;
-    if (canGoBack()) skipPageAnim = true;         // pas d'animation -> pas de flash
-    goBack();
+    lockUntil = Date.now() + 700 + NATIVE_WAIT_MS;
+    setTimeout(() => {
+      // iOS a deja recule pendant ou juste apres le geste : c'est son geste
+      // natif. On le laisse faire, maintenant et pour toujours.
+      if (lastPopAt >= s.at) {
+        try { localStorage.setItem(NATIVE_SWIPE_KEY, '1'); } catch { /* quota */ }
+        start = null;
+        disabled = true;
+        return;
+      }
+      if (disabled) return;
+      if (canGoBack()) skipPageAnim = true;       // pas d'animation -> pas de flash
+      selfBackAt = Date.now();
+      goBack();
+    }, NATIVE_WAIT_MS);
   }, { passive: true });
 
   window.addEventListener('touchcancel', () => { start = null; hidePill(); }, { passive: true });
@@ -544,7 +577,7 @@ async function boot() {
 
 function enregistrerServiceWorker() {
   if (!('serviceWorker' in navigator)) return;
-  navigator.serviceWorker.register('sw.js?v=1.28').then((reg) => {
+  navigator.serviceWorker.register('sw.js?v=1.29').then((reg) => {
     reg.update().catch(() => {});
     const onReload = () => {
       navigator.serviceWorker.addEventListener('controllerchange', () => location.reload(), { once: true });
