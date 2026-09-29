@@ -178,15 +178,40 @@ export function bindRatingButton(btn, meta, onChange) {
     picker.result.then((v) => { picker = null; apply(v); });
   };
 
+  const tap = async () => {
+    if (picker) return;
+    if (current()) { openPicker(); return; }
+    await apply(5);
+    if (!localStorage.getItem(HINT_KEY)) {
+      try { localStorage.setItem(HINT_KEY, '1'); } catch { /* quota */ }
+      setTimeout(() => toast(tr('Astuce : reste appuye pour choisir une autre note')), 900);
+    }
+  };
+
+  // Pendant l'appui, toute la page est rendue non selectionnable (classe sur
+  // body) : sur iPhone, un appui long lance sinon la selection de texte
+  // native, qui s'etendait a toute la page.
+  const pressing = (on) => {
+    document.body.classList.toggle('rate-pressing', on);
+    if (on) window.getSelection?.()?.removeAllRanges();
+  };
+
   btn.addEventListener('contextmenu', (e) => e.preventDefault());
+
+  // Le touchstart annule (non passif) est ce qui empeche vraiment iOS de
+  // lancer la selection / la loupe. Consequence : iOS ne genere plus de
+  // "click" apres un tap, le tap est donc gere sur pointerup.
+  btn.addEventListener('touchstart', (e) => { if (e.cancelable) e.preventDefault(); }, { passive: false });
 
   btn.addEventListener('pointerdown', (e) => {
     if (e.button !== undefined && e.button !== 0) return;
     longFired = false;
     startXY = { x: e.clientX, y: e.clientY };
+    pressing(true);
     clearTimeout(timer);
     timer = setTimeout(() => {
       longFired = true;
+      window.getSelection?.()?.removeAllRanges();
       try { navigator.vibrate?.(12); } catch { /* ignore */ }
       openPicker();
     }, LONG_MS);
@@ -195,27 +220,33 @@ export function bindRatingButton(btn, meta, onChange) {
   btn.addEventListener('pointermove', (e) => {
     if (!longFired && startXY && Math.hypot(e.clientX - startXY.x, e.clientY - startXY.y) > 12) {
       clearTimeout(timer); // le doigt part ailleurs : ce n'est pas un appui long
+      startXY = null;      // ... ni un tap
     }
     if (longFired && picker) picker.track(e.clientX, e.clientY);
   });
 
-  const end = () => {
+  btn.addEventListener('pointerup', () => {
     clearTimeout(timer);
-    if (longFired && picker) picker.release();
-  };
-  btn.addEventListener('pointerup', end);
-  btn.addEventListener('pointercancel', () => clearTimeout(timer));
-
-  btn.addEventListener('click', async (e) => {
-    e.preventDefault();
-    if (longFired) { longFired = false; return; } // deja gere par l'appui long
-    if (picker) return;
-    if (current()) { openPicker(); return; }
-    await apply(5);
-    if (!localStorage.getItem(HINT_KEY)) {
-      try { localStorage.setItem(HINT_KEY, '1'); } catch { /* quota */ }
-      setTimeout(() => toast(tr('Astuce : reste appuye pour choisir une autre note')), 900);
+    pressing(false);
+    if (longFired) {
+      picker?.release();
+      return;
     }
+    if (startXY) tap();
+    startXY = null;
+  });
+
+  btn.addEventListener('pointercancel', () => {
+    clearTimeout(timer);
+    pressing(false);
+    startXY = null;
+  });
+
+  // Souris et tactile passent par pointerup ci-dessus ; le click ne sert plus
+  // qu'au clavier (Entree / Espace), reconnaissable a detail === 0.
+  btn.addEventListener('click', (e) => {
+    e.preventDefault();
+    if (e.detail === 0) tap();
   });
 }
 

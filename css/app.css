@@ -2417,6 +2417,15 @@ body.onboarding-on .scrolltop { display: none; }
   -webkit-user-select: none;
   user-select: none;
 }
+/* Pose pendant l'appui sur le bouton de note (voir bindRatingButton) */
+body.rate-pressing,
+body.rate-pressing * {
+  -webkit-user-select: none !important;
+  user-select: none !important;
+  -webkit-touch-callout: none !important;
+}
+.act-rate * { -webkit-user-select: none; user-select: none; pointer-events: none; }
+
 .act.on-rate { color: var(--rc); }
 .act.on-rate .act-ico {
   color: var(--rc);
