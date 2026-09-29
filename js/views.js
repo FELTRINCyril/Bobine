@@ -7,7 +7,7 @@ import {
   watchedEpisodeCount, totalEpisodePlays, computeStats, formatDuration,
   savePlaylist, deletePlaylist, createPlaylist,
   exportJson, importJson, ensureItem, isBackupHealthy, touch,
-  isFavoritePerson, toggleFavoritePerson,
+  isFavoritePerson, toggleFavoritePerson, resumeItems,
 } from './db.js';
 import { findUniverse, sortByMcuChrono, MCU_CHRONO } from './universes.js';
 import { getConfig, resetConfig, getMetadataMode, setMetadataMode } from './config.js';
@@ -28,7 +28,7 @@ import {
   bindRatingButton, toggleAdd, removeFromList, setMoviePlays, setEpisodePlays,
   markSeason, updateItemTotals, openPlaylistSheet,
   cacheEpisodeRuntimes, syncTvRuntimes,
-  episodesUnder, levelUpEpisodes,
+  episodesUnder, levelUpEpisodes, hideFromResume,
 } from './actions.js';
 
 const $view = () => document.getElementById('view');
@@ -446,31 +446,14 @@ export async function renderHome() {
   const body = h('<div class="home-body"></div>');
   page.appendChild(body);
 
-  // En cours (series commencees, pas terminees)
-  const started = [...state.items.values()]
-    .filter((i) => i.type === 'tv' && isStarted(i) && !isSeen(i))
-    .sort((a, b) => b.updatedAt - a.updatedAt)
-    .slice(0, 10);
-  if (started.length) {
-    const row = h('<div class="hscroll"><div class="hscroll-inner"></div></div>');
-    const inner = row.firstElementChild;
-    for (const it of started) {
-      const p = tvProgress(it);
-      const pct = p.total ? Math.round(p.ratio * 100) : 30;
-      const src = img(it.backdrop || it.poster, 'w500');
-      inner.appendChild(h(`
-        <a class="resume-card" href="#/detail/tv/${it.tmdbId}">
-          ${src ? `<img class="bg" src="${src}" alt="" loading="lazy">` : '<div class="bg"></div>'}
-          <div class="info">
-            <div class="t">${esc(it.title)}</div>
-            <div class="s">${p.watched} ep.${p.total ? ` ${tr('sur')} ${p.total}` : ''}</div>
-            <div class="progress"><i style="width:${pct}%"></i></div>
-          </div>
-        </a>
-      `));
-    }
-    body.appendChild(section(tr('Reprendre'), row));
-  }
+  // Reprendre : series en cours, hors series "a jour" (voir isResumable)
+  const resumeSlot = h('<div data-refresh></div>');
+  // Rappele par app.js quand l'accueil est restaure depuis le cache de pages :
+  // un episode vu entre-temps doit s'y refleter.
+  resumeSlot.refresh = () => drawResume(resumeSlot);
+  body.appendChild(resumeSlot);
+  drawResume(resumeSlot);
+  refreshAiredInfo(() => drawResume(resumeSlot));
 
   // Watchlist apercu
   const wl = [...state.items.values()]
@@ -524,6 +507,61 @@ export async function renderHome() {
   slots.forEach(([title, fetcher, type, listingId], idx) => {
     homeFetchSection(body, tr(title), fetcher, type, listingId, { lazy: idx >= 2 });
   });
+}
+
+// Rangee "Reprendre" de l'accueil. Chaque carte a une croix pour la retirer
+// (elle revient au prochain episode vu).
+function drawResume(slot) {
+  slot.innerHTML = '';
+  const items = resumeItems().slice(0, 12);
+  if (!items.length) return;
+  const row = h('<div class="hscroll"><div class="hscroll-inner"></div></div>');
+  const inner = row.firstElementChild;
+  for (const it of items) {
+    const p = tvProgress(it);
+    const pct = p.total ? Math.round(p.ratio * 100) : 30;
+    const src = img(it.backdrop || it.poster, 'w500');
+    const card = h(`
+      <a class="resume-card" href="#/detail/tv/${it.tmdbId}">
+        ${src ? `<img class="bg" src="${src}" alt="" loading="lazy">` : '<div class="bg"></div>'}
+        <div class="info">
+          <div class="t">${esc(it.title)}</div>
+          <div class="s">${p.watched} ep.${p.total ? ` ${tr('sur')} ${p.total}` : ''}</div>
+          <div class="progress"><i style="width:${pct}%"></i></div>
+        </div>
+        <button type="button" class="resume-hide" aria-label="${tr('Retirer de Reprendre')}">${I.x}</button>
+      </a>
+    `);
+    card.querySelector('.resume-hide').addEventListener('click', async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      await hideFromResume(it);
+      card.classList.add('is-leaving');
+      setTimeout(() => drawResume(slot), 220);
+    });
+    inner.appendChild(card);
+  }
+  slot.appendChild(section(tr('Reprendre'), row));
+}
+
+// Met a jour, en arriere-plan, le dernier episode diffuse des series en cours
+// (pour savoir lesquelles sont "a jour"). Une fois par tranche de 12 h par
+// serie, pour ne pas solliciter TMDB a chaque passage sur l'accueil.
+const AIRED_TTL = 12 * 3600 * 1000;
+async function refreshAiredInfo(onChange) {
+  const stale = [...state.items.values()]
+    .filter((it) => it.type === 'tv' && isStarted(it) && !isSeen(it))
+    .filter((it) => Date.now() - (it.airedCheckedAt || 0) > AIRED_TTL)
+    .slice(0, 12);
+  if (!stale.length) return;
+  const before = resumeItems().map((it) => it.id).join(',');
+  await Promise.all(stale.map(async (it) => {
+    try {
+      const d = await api.detail('tv', it.tmdbId, { isAnime: it.isAnime });
+      updateItemTotals({ type: 'tv', tmdbId: it.tmdbId }, d);
+    } catch { /* hors ligne : on reessaiera au prochain passage */ }
+  }));
+  if (resumeItems().map((it) => it.id).join(',') !== before) onChange();
 }
 
 /* ============================== CATALOGUES ============================== */

@@ -223,6 +223,7 @@ function route() {
     cached.el.classList.add('no-anim');
     view.replaceChildren(cached.el);
     refreshCards(cached.el);
+    cached.el.querySelectorAll('[data-refresh]').forEach((el) => el.refresh?.());
     restoreScroll(cached.y || 0);
     requestAnimationFrame(() => restoreHscrolls(cached.el, cached.hscrolls));
     return;
@@ -543,7 +544,7 @@ async function boot() {
 
 function enregistrerServiceWorker() {
   if (!('serviceWorker' in navigator)) return;
-  navigator.serviceWorker.register('sw.js?v=1.27').then((reg) => {
+  navigator.serviceWorker.register('sw.js?v=1.28').then((reg) => {
     reg.update().catch(() => {});
     const onReload = () => {
       navigator.serviceWorker.addEventListener('controllerchange', () => location.reload(), { once: true });

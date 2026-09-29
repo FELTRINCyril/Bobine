@@ -322,11 +322,20 @@ export async function setEpisodePlays(meta, season, episode, plays) {
   if (!it.episodeRuntime) it.episodeRuntime = meta.episodeRuntime || 50;
   const key = `${season}:${episode}`;
   if (plays > 0) {
+    if (plays > (it.episodes[key] || 0)) it.lastWatchedAt = Date.now();
     it.episodes[key] = plays;
     it.watchlist = true;
   } else delete it.episodes[key];
   await saveItem(it);
   return it.episodes[key] || 0;
+}
+
+// Retire une serie de "Reprendre". Elle y revient d'elle-meme des qu'un
+// nouvel episode est marque vu (lastWatchedAt passe alors devant).
+export async function hideFromResume(it) {
+  it.resumeHiddenAt = Date.now();
+  await saveItem(it);
+  toast(tr('Retiree de Reprendre. Elle reviendra au prochain episode vu.'));
 }
 
 // ---- Rattrapage : completer les episodes precedents d'une saison ----
@@ -358,6 +367,7 @@ export async function levelUpEpisodes(meta, season, epNumbers, target) {
   }
   if (changed) {
     it.watchlist = true;
+    it.lastWatchedAt = Date.now();
     await saveItem(it);
   }
   return changed;
@@ -375,6 +385,7 @@ export async function markSeason(meta, season, episodeNumbers, mode) {
     if (mode === 'rewatch') { it.episodes[key] = cur + 1; touched = true; }
   }
   if (touched || mode === 'all') it.watchlist = true;
+  if (touched) it.lastWatchedAt = Date.now();
   await saveItem(it);
 }
 
@@ -390,6 +401,11 @@ export function updateItemTotals(meta, detail) {
   }
   it.seasonEpisodeTotals = totals;
   it.episodeTotal = sum;
+  // Dernier episode deja diffuse : sert a savoir si la serie est "a jour"
+  // (tout vu sauf les episodes annonces mais pas encore sortis).
+  const la = detail.last_episode_to_air;
+  it.lastAired = la?.season_number ? { s: la.season_number, e: la.episode_number } : null;
+  it.airedCheckedAt = Date.now();
   if (detail.episode_run_time?.length) {
     it.episodeRuntime = Math.round(
       detail.episode_run_time.reduce((a, b) => a + b, 0) / detail.episode_run_time.length

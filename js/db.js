@@ -192,6 +192,9 @@ function mergeItem(local, remote) {
   merged.watchlist = newest.watchlist;
   merged.addedAt = Math.min(local.addedAt || Infinity, remote.addedAt || Infinity) || Date.now();
   merged.updatedAt = Math.max(local.updatedAt || 0, remote.updatedAt || 0);
+  // "Reprendre" : dernier episode vu et retrait manuel, le plus recent gagne.
+  merged.lastWatchedAt = Math.max(local.lastWatchedAt || 0, remote.lastWatchedAt || 0) || undefined;
+  merged.resumeHiddenAt = Math.max(local.resumeHiddenAt || 0, remote.resumeHiddenAt || 0) || undefined;
   normalizeRating(merged);
   return merged;
 }
@@ -211,7 +214,7 @@ export async function mergeAll(items, playlists, people) {
   for (const remote of items || []) {
     if (!remote?.id) continue;
     const local = state.items.get(remote.id);
-    if (!local) normalizeRating(remote);
+    if (!local) { normalizeRating(remote); normalizeLastWatched(remote); }
     const merged = mergeItem(local, remote);
     if (itemSig(local) !== itemSig(merged)) changed++;
     state.items.set(merged.id, merged);
@@ -300,7 +303,9 @@ export async function loadState() {
   // Pas de touch() : ce n'est pas une modification de l'utilisateur, elle ne
   // doit pas faire gagner cet appareil lors de la prochaine synchro.
   for (const it of state.items.values()) {
-    if (normalizeRating(it)) await idbPutSafe('items', it);
+    const a = normalizeRating(it);
+    const b = normalizeLastWatched(it);
+    if (a || b) await idbPutSafe('items', it);
   }
   syncBackup();
 }
@@ -382,6 +387,16 @@ export async function saveItem(it) {
   syncBackup();
 }
 
+// Donnees d'avant `lastWatchedAt` : on prend la derniere modification comme
+// date du dernier visionnage. A faire au chargement, AVANT toute sauvegarde
+// (ouvrir une fiche met updatedAt a jour et fausserait la date).
+function normalizeLastWatched(it) {
+  if (it.type !== 'tv' || it.lastWatchedAt !== undefined) return false;
+  if (!Object.values(it.episodes || {}).some((n) => n > 0)) return false;
+  it.lastWatchedAt = it.updatedAt || it.addedAt || Date.now();
+  return true;
+}
+
 // ---- Stats derivees ----
 
 export function watchedEpisodeCount(it) {
@@ -402,6 +417,43 @@ export function isSeen(it) {
   if (it.type === 'movie') return it.plays > 0;
   const { watched, total } = tvProgress(it);
   return total > 0 && watched >= total;
+}
+
+// Vrai si tous les episodes DEJA DIFFUSES sont vus (serie "a jour"), meme si
+// des episodes a venir sont deja annonces. null si on ne connait pas encore
+// le dernier episode diffuse (fiche jamais rechargee depuis cette version).
+export function isCaughtUp(it) {
+  const last = it?.lastAired;
+  if (!last?.s) return null;
+  const totals = it.seasonEpisodeTotals || {};
+  for (let s = 1; s <= last.s; s++) {
+    const count = s === last.s ? last.e : (totals[s] || 0);
+    for (let e = 1; e <= count; e++) {
+      if (!(it.episodes[`${s}:${e}`] > 0)) return false;
+    }
+  }
+  return true;
+}
+
+// ---- "Reprendre" (accueil) ----
+// Une serie y figure si elle est commencee, qu'il lui reste un episode deja
+// diffuse a voir, qu'elle n'a pas ete retiree a la main depuis le dernier
+// episode vu, et qu'un episode a ete vu il y a moins de RESUME_MAX_DAYS jours.
+export const RESUME_MAX_DAYS = 21;
+export const lastWatchOf = (it) => it.lastWatchedAt || it.updatedAt || 0;
+
+export function isResumable(it, now = Date.now()) {
+  if (it.type !== 'tv' || !isStarted(it) || isSeen(it)) return false;
+  if (isCaughtUp(it) === true) return false;
+  const last = lastWatchOf(it);
+  if (it.resumeHiddenAt && it.resumeHiddenAt >= last) return false;
+  return now - last <= RESUME_MAX_DAYS * 86400000;
+}
+
+export function resumeItems() {
+  return [...state.items.values()]
+    .filter((it) => isResumable(it))
+    .sort((a, b) => lastWatchOf(b) - lastWatchOf(a));
 }
 
 export function isStarted(it) {

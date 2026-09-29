@@ -481,6 +481,11 @@ const EN = {
   'Ajouter a ma liste': 'Add to my list',
   'Retirer de ma liste': 'Remove from my list',
 
+  // Reprendre
+  'Retirer de Reprendre': 'Remove from Continue watching',
+  'Retiree de Reprendre. Elle reviendra au prochain episode vu.':
+    'Removed from Continue watching. It will come back with the next episode you watch.',
+
   // Divers
   'sur': 'of',
   'Remonter en haut': 'Back to top',
