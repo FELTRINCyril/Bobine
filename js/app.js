@@ -14,7 +14,7 @@ import { isConfigured } from './config.js';
 import { renderOnboarding } from './onboarding.js';
 import { initSync, handleAuthRedirect, afterConnect, needsReconnect } from './sync.js';
 import { buildDeskbar, syncDeskbar, enhanceShelves } from './deskbar.js';
-import { stampHistory, navIndex, markFirst, goBack, canGoBack } from './nav.js';
+import { stampHistory, navIndex, markFirst, goBack, canGoBack, saveScroll, savedScroll } from './nav.js';
 import { openSyncPrompt, watchSyncAuth, leverSnooze } from './syncPrompt.js';
 
 const TABS = [
@@ -189,6 +189,7 @@ function route() {
   // met de cote la page qu'on quitte, sous le numero de SON entree
   if (currentHash && currentHash !== hash) {
     scrollPos.set(quittee, window.scrollY);
+    saveScroll(quittee, window.scrollY);
     const prevPath = currentHash.split('/')[1];
     if (CACHEABLE.has(prevPath) && view.firstElementChild) {
       pageCache.set(quittee, {
@@ -259,7 +260,10 @@ function route() {
   // 'same' = meme entree re-rendue (donnees fraiches de la synchro) : on
   // reste ou on est.
   const sameY = window.scrollY;
-  restoreScroll(isBack ? (scrollPos.get(navIndex()) || 0) : (sens === 'same' ? sameY : 0));
+  // Position memorisee en memoire, ou dans la pile de nav.js si l'app a ete
+  // rechargee entre-temps.
+  const backY = scrollPos.get(navIndex()) ?? savedScroll(navIndex());
+  restoreScroll(isBack ? backY : (sens === 'same' ? sameY : 0));
 }
 
 // Bouton + sur les affiches : ajoute / retire directement de la watchlist.
@@ -454,6 +458,12 @@ async function boot() {
     else toast(tr('Synchro cloud indisponible pour le moment.'));
   }, { once: true });
   watchSyncAuth();
+  // App quittee (redirection Google, passage en arriere-plan que iOS peut
+  // transformer en rechargement) : on note la position de la page courante
+  // pour la retrouver au retour arriere.
+  const noterScroll = () => saveScroll(navIndex(), window.scrollY);
+  window.addEventListener('pagehide', noterScroll);
+  document.addEventListener('visibilitychange', () => { if (document.hidden) noterScroll(); });
   const rotateMsg = document.querySelector('#rotate-lock p');
   if (rotateMsg) rotateMsg.innerHTML = `${tr('Bobine se regarde en portrait.')}<br>${tr('Remets ton telephone dans le bon sens !')}`;
   buildTabbar();
@@ -533,7 +543,7 @@ async function boot() {
 
 function enregistrerServiceWorker() {
   if (!('serviceWorker' in navigator)) return;
-  navigator.serviceWorker.register('sw.js?v=1.26').then((reg) => {
+  navigator.serviceWorker.register('sw.js?v=1.27').then((reg) => {
     reg.update().catch(() => {});
     const onReload = () => {
       navigator.serviceWorker.addEventListener('controllerchange', () => location.reload(), { once: true });
