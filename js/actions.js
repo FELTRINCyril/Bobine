@@ -7,7 +7,7 @@ import { api } from './api.js';
 import { h, esc, I, openSheet, toast } from './ui.js';
 import { tr } from './i18n.js';
 import { openAskSheet } from './confirm.js';
-import { RATINGS, ratingOf, ratingLabel } from './ratings.js';
+import { RATINGS, ratingOf, ratingInfo, ratingLabel } from './ratings.js';
 
 // meta = { type, tmdbId, title, poster, backdrop, year, isAnime }
 
@@ -83,77 +83,127 @@ export async function setRating(meta, rating) {
   return r;
 }
 
-// Selecteur de note, en bulle au-dessus du bouton `anchor`.
-// Deux facons de choisir : toucher une option, ou (apres un appui long)
-// glisser le doigt jusqu'a une option et relacher. Resout la note choisie,
-// 0 pour "retirer", ou null si on ferme sans choisir.
+// Selecteur de note en eventail : les 5 notes s'ouvrent en demi-cercle
+// autour du bouton `anchor`, de Nul (a gauche) a J'adore (a droite), en
+// passant par le haut. On glisse le doigt dans la direction d'une note et on
+// relache pour la choisir ; relacher sans avoir vise de note annule.
+// Relacher sur la note deja posee la retire.
+// Retourne { result, track(x, y), release(), cancel() } ; result resout la
+// note choisie, 0 pour "retirer", ou null si annule.
+const FAN_RADIUS = 96;    // rayon de l'eventail, en px
+const FAN_DEADZONE = 26;  // en dessous, le doigt est encore "sur" le bouton
+
 export function openRatingPicker(anchor, current = 0) {
   const root = document.getElementById('overlay-root');
-  const veil = h('<div class="rate-veil"></div>');
-  const pop = h(`
-    <div class="rate-pop" role="dialog" aria-label="${tr('Noter')}">
-      <div class="rate-opts">
-        ${RATINGS.map((r) => `
-          <button type="button" class="rate-opt rate-${r.key} ${r.value === current ? 'on' : ''}" data-v="${r.value}" aria-label="${esc(tr(r.label))}">
+  const a = anchor.querySelector('.act-ico')?.getBoundingClientRect() || anchor.getBoundingClientRect();
+  const margin = 34;
+  // Centre de l'eventail : sur le bouton, decale au besoin pour que les
+  // notes des extremites restent a l'ecran.
+  const cx = Math.min(Math.max(a.left + a.width / 2, FAN_RADIUS + margin), window.innerWidth - FAN_RADIUS - margin);
+  const cy = a.top + a.height / 2;
+  // Pas la place au-dessus : l'eventail s'ouvre vers le bas.
+  const up = cy - FAN_RADIUS - 70 > 0;
+  const dir = up ? -1 : 1;
+
+  // Nul -> J'adore, de gauche a droite : angles 180, 135, 90, 45, 0 degres.
+  const order = [...RATINGS].sort((x, y) => x.value - y.value);
+  const angleOf = (i) => 180 - i * 45;
+
+  const fan = h(`
+    <div class="rate-fan ${up ? '' : 'down'}" role="dialog" aria-label="${tr('Noter')}">
+      <div class="rate-fan-veil"></div>
+      <svg class="rate-fan-arc" width="${FAN_RADIUS * 2 + 60}" height="${FAN_RADIUS + 60}" viewBox="0 0 ${FAN_RADIUS * 2 + 60} ${FAN_RADIUS + 60}">
+        <path d="M 30 ${FAN_RADIUS + 30} A ${FAN_RADIUS} ${FAN_RADIUS} 0 0 1 ${FAN_RADIUS * 2 + 30} ${FAN_RADIUS + 30}"/>
+      </svg>
+      <div class="rate-fan-hub">${ratingInfo(current)?.icon || I.heart}</div>
+      ${order.map((r, i) => {
+        const rad = (angleOf(i) * Math.PI) / 180;
+        const x = Math.cos(rad) * FAN_RADIUS;
+        const y = Math.sin(rad) * FAN_RADIUS * dir;
+        return `
+          <div class="rate-fan-opt rate-${r.key} ${r.value === current ? 'current' : ''}" data-v="${r.value}"
+               style="--x:${x.toFixed(1)}px;--y:${y.toFixed(1)}px;--i:${i}">
             <span class="rate-ico">${r.icon}</span>
-          </button>`).join('')}
-      </div>
-      <div class="rate-caption">${current ? esc(ratingLabel(current)) : tr('Reste appuye et glisse, ou touche')}</div>
-      ${current ? `<button type="button" class="rate-clear" data-v="0">${I.x}<span>${tr('Retirer la note')}</span></button>` : ''}
+          </div>`;
+      }).join('')}
+      <div class="rate-fan-label">${tr('Glisse vers une note')}</div>
     </div>
   `);
-  root.append(veil, pop);
+  fan.style.setProperty('--cx', `${cx}px`);
+  fan.style.setProperty('--cy', `${cy}px`);
+  fan.style.setProperty('--r', `${FAN_RADIUS}px`);
+  root.appendChild(fan);
+  requestAnimationFrame(() => requestAnimationFrame(() => fan.classList.add('in')));
 
-  // Placement : centre sur le bouton, au-dessus si la place le permet.
-  const a = anchor.getBoundingClientRect();
-  const w = pop.offsetWidth;
-  const hgt = pop.offsetHeight;
-  const left = Math.min(Math.max(8, a.left + a.width / 2 - w / 2), window.innerWidth - w - 8);
-  const top = a.top - hgt - 10 > 8 ? a.top - hgt - 10 : a.bottom + 10;
-  pop.style.left = `${left}px`;
-  pop.style.top = `${top}px`;
-  requestAnimationFrame(() => pop.classList.add('in'));
-
-  const caption = pop.querySelector('.rate-caption');
+  const opts = [...fan.querySelectorAll('.rate-fan-opt')];
+  const label = fan.querySelector('.rate-fan-label');
+  const hub = fan.querySelector('.rate-fan-hub');
   let hover = null;
-  const setHover = (btn) => {
-    if (btn === hover) return;
+
+  const setHover = (el) => {
+    if (el === hover) return;
     hover?.classList.remove('hover');
-    hover = btn;
-    if (btn) {
-      btn.classList.add('hover');
-      caption.textContent = Number(btn.dataset.v) ? ratingLabel(btn.dataset.v) : tr('Retirer la note');
+    hover = el;
+    fan.classList.toggle('aiming', !!el);
+    if (!el) {
+      label.textContent = tr('Glisse vers une note');
+      label.style.removeProperty('--lc');
+      hub.innerHTML = ratingInfo(current)?.icon || I.heart;
+      hub.className = 'rate-fan-hub';
+      return;
     }
+    el.classList.add('hover');
+    const v = Number(el.dataset.v);
+    const info = ratingInfo(v);
+    label.textContent = v === current ? tr('Retirer la note') : tr(info.label);
+    label.style.setProperty('--lc', `var(--rate-${info.key})`);
+    hub.innerHTML = info.icon;
+    hub.className = `rate-fan-hub rate-${info.key}`;
+    try { navigator.vibrate?.(8); } catch { /* ignore */ }
+  };
+
+  // Vise par la DIRECTION du doigt, pas par sa position exacte : pas besoin
+  // de tomber pile sur une pastille, il suffit de partir du bon cote.
+  const track = (x, y) => {
+    const dx = x - cx;
+    const dy = (y - cy) * dir; // vers l'ouverture de l'eventail = positif
+    if (Math.hypot(dx, dy) < FAN_DEADZONE) { setHover(null); return; }
+    const deg = (Math.atan2(dy, dx) * 180) / Math.PI; // 0 = droite, 90 = ouverture
+    if (deg < -35 && deg > -145) { setHover(null); return; } // doigt parti a l'oppose
+    const norm = deg < -90 ? deg + 360 : deg; // -35..0 et 180..215 restent aux extremites
+    let best = 0;
+    for (let i = 1; i < opts.length; i++) {
+      if (Math.abs(angleOf(i) - norm) < Math.abs(angleOf(best) - norm)) best = i;
+    }
+    setHover(opts[best]);
   };
 
   let done;
   const result = new Promise((resolve) => { done = resolve; });
+  let closed = false;
   const finish = (value) => {
-    veil.remove();
-    pop.remove();
+    if (closed) return;
+    closed = true;
+    fan.classList.remove('in');
+    fan.classList.add('out');
+    setTimeout(() => fan.remove(), 180);
     done(value);
   };
 
-  veil.addEventListener('click', () => finish(null));
-  pop.addEventListener('click', (e) => {
-    const b = e.target.closest('[data-v]');
-    if (b) finish(Number(b.dataset.v));
-  });
-
-  // Suivi du doigt reste pose apres l'appui long (appele par bindRatingButton)
-  const track = (x, y) => {
-    const el = document.elementFromPoint(x, y);
-    setHover(el?.closest?.('.rate-pop [data-v]') || null);
-  };
   const release = () => {
-    if (hover) finish(Number(hover.dataset.v));
+    if (!hover) { finish(null); return; }
+    const v = Number(hover.dataset.v);
+    hover.classList.add('picked');
+    finish(v === current ? 0 : v);
   };
-  return { result, track, release };
+
+  return { result, track, release, cancel: () => finish(null) };
 }
 
 // Bouton de note : un tap sur un titre non note = J'adore (le geste de
-// l'ancien favori) ; un tap sur un titre deja note ouvre le selecteur, pour
-// ne jamais perdre une note par megarde ; un appui long l'ouvre toujours.
+// l'ancien favori) ; un appui long ouvre l'eventail des notes. Un tap sur un
+// titre deja note ne change rien (on ne perd jamais une note par megarde) :
+// il rappelle juste le geste.
 // onChange(rating) est appele apres chaque modification.
 const LONG_MS = 420;
 const HINT_KEY = 'bobine_rate_hint';
@@ -175,12 +225,19 @@ export function bindRatingButton(btn, meta, onChange) {
 
   const openPicker = () => {
     picker = openRatingPicker(btn, current());
+    if (startXY) picker.track(startXY.x, startXY.y);
     picker.result.then((v) => { picker = null; apply(v); });
   };
 
   const tap = async () => {
     if (picker) return;
-    if (current()) { openPicker(); return; }
+    if (current()) {
+      btn.classList.remove('nudge');
+      void btn.offsetWidth;
+      btn.classList.add('nudge');
+      toast(tr('Reste appuye et glisse pour changer la note'));
+      return;
+    }
     await apply(5);
     if (!localStorage.getItem(HINT_KEY)) {
       try { localStorage.setItem(HINT_KEY, '1'); } catch { /* quota */ }
@@ -240,6 +297,7 @@ export function bindRatingButton(btn, meta, onChange) {
     clearTimeout(timer);
     pressing(false);
     startXY = null;
+    picker?.cancel();
   });
 
   // Souris et tactile passent par pointerup ci-dessus ; le click ne sert plus

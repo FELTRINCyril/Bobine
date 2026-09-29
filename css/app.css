@@ -2434,74 +2434,145 @@ body.rate-pressing * {
   box-shadow: 0 4px 14px color-mix(in srgb, var(--rc) 20%, transparent);
 }
 
-/* Bulle de choix */
-.rate-veil {
+/* Eventail de notes (appui long sur le bouton de note).
+   --cx/--cy : centre du bouton ; --x/--y : position de chaque note. */
+.rate-fan {
   position: fixed;
   inset: 0;
   z-index: 62;
-  background: rgba(0, 0, 0, 0.35);
-}
-
-.rate-pop {
-  position: fixed;
-  z-index: 63;
-  padding: 10px 10px 8px;
-  border-radius: 22px;
-  background: var(--surface);
-  border: 1px solid var(--line);
-  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.45);
-  transform: translateY(8px) scale(0.96);
-  opacity: 0;
-  transition: transform 0.16s ease-out, opacity 0.16s ease-out;
+  pointer-events: none;
   -webkit-user-select: none;
   user-select: none;
 }
-.rate-pop.in { transform: none; opacity: 1; }
 
-.rate-opts { display: flex; gap: 6px; }
+.rate-fan-veil {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at var(--cx) var(--cy), rgba(8, 6, 12, 0.7) 0, rgba(8, 6, 12, 0.9) 220px);
+  -webkit-backdrop-filter: blur(3px);
+  backdrop-filter: blur(3px);
+  opacity: 0;
+  transition: opacity 0.2s ease-out;
+}
+.rate-fan.in .rate-fan-veil { opacity: 1; }
 
-.rate-opt {
+/* Arc guide, tres discret, sur lequel les notes se posent */
+.rate-fan-arc {
+  position: absolute;
+  left: calc(var(--cx) - var(--r) - 30px);
+  top: calc(var(--cy) - var(--r) - 30px);
+  overflow: visible;
+  opacity: 0;
+  transform: scale(0.6);
+  transform-origin: 50% calc(100% - 30px);
+  transition: opacity 0.25s ease-out, transform 0.3s cubic-bezier(0.2, 0.9, 0.3, 1.2);
+}
+.rate-fan-arc path {
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.16);
+  stroke-width: 1.5;
+  stroke-dasharray: 3 6;
+  stroke-linecap: round;
+}
+.rate-fan.down .rate-fan-arc { rotate: 180deg; }
+.rate-fan.in .rate-fan-arc { opacity: 1; transform: none; }
+
+/* Pastille centrale, posee sur le bouton : montre la note visee */
+.rate-fan-hub {
+  position: absolute;
+  left: var(--cx);
+  top: var(--cy);
+  width: 54px;
+  height: 54px;
+  margin: -27px 0 0 -27px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  color: var(--rc, var(--text));
+  background: var(--surface-3);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--rc, #fff) 45%, transparent), 0 8px 24px rgba(0, 0, 0, 0.5);
+  transform: scale(0.8);
+  transition: transform 0.18s ease-out, color 0.12s, box-shadow 0.12s;
+}
+.rate-fan-hub svg { width: 26px; height: 26px; }
+.rate-fan.in .rate-fan-hub { transform: scale(1); }
+.rate-fan.aiming .rate-fan-hub { transform: scale(0.88); }
+
+.rate-fan-opt {
+  position: absolute;
+  left: var(--cx);
+  top: var(--cy);
   width: 50px;
   height: 50px;
+  margin: -25px 0 0 -25px;
   border-radius: 50%;
   display: grid;
   place-items: center;
   color: var(--rc);
-  background: color-mix(in srgb, var(--rc) 12%, var(--surface-2));
-  transition: transform 0.12s ease-out, background 0.12s;
+  background: color-mix(in srgb, var(--rc) 18%, var(--surface-2));
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+  opacity: 0;
+  transform: translate(0, 0) scale(0.3);
+  transition:
+    transform 0.32s cubic-bezier(0.2, 0.9, 0.3, 1.25) calc(var(--i) * 28ms),
+    opacity 0.2s ease-out calc(var(--i) * 28ms),
+    background 0.12s, color 0.12s, box-shadow 0.12s;
 }
-.rate-opt svg { width: 26px; height: 26px; }
-.rate-opt.on { box-shadow: 0 0 0 2px var(--rc); }
-.rate-opt.hover,
-.rate-opt:active {
-  transform: translateY(-6px) scale(1.18);
-  background: color-mix(in srgb, var(--rc) 26%, var(--surface-2));
+.rate-fan-opt svg { width: 26px; height: 26px; }
+.rate-fan.in .rate-fan-opt {
+  opacity: 1;
+  transform: translate(var(--x), var(--y)) scale(1);
 }
+/* Note deja posee : un anneau la signale */
+.rate-fan-opt.current { box-shadow: 0 0 0 2px var(--rc), 0 6px 18px rgba(0, 0, 0, 0.45); }
+/* Note visee : grossit, se remplit de sa couleur */
+.rate-fan.in .rate-fan-opt.hover {
+  transform: translate(calc(var(--x) * 1.12), calc(var(--y) * 1.12)) scale(1.32);
+  background: var(--rc);
+  color: #fff;
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--rc) 30%, transparent), 0 10px 26px color-mix(in srgb, var(--rc) 45%, transparent);
+  transition-delay: 0s;
+}
+.rate-fan.in.aiming .rate-fan-opt:not(.hover) { opacity: 0.55; transition-delay: 0s; }
 
-.rate-caption {
-  margin-top: 8px;
-  text-align: center;
-  font-size: 12.5px;
+.rate-fan-label {
+  position: absolute;
+  left: var(--cx);
+  top: calc(var(--cy) - var(--r) - 86px);
+  transform: translateX(-50%) translateY(6px);
+  padding: 7px 14px;
+  border-radius: 999px;
+  white-space: nowrap;
+  font-size: 14px;
   font-weight: 700;
-  color: var(--text-muted);
+  color: #fff;
+  background: var(--lc, rgba(40, 34, 52, 0.92));
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.4);
+  opacity: 0;
+  transition: opacity 0.2s ease-out 0.08s, transform 0.2s ease-out 0.08s, background 0.12s;
+}
+.rate-fan.down .rate-fan-label { top: calc(var(--cy) + var(--r) + 42px); }
+.rate-fan.in .rate-fan-label { opacity: 1; transform: translateX(-50%); }
+
+/* Fermeture : tout se replie vers le bouton */
+.rate-fan.out .rate-fan-veil,
+.rate-fan.out .rate-fan-arc,
+.rate-fan.out .rate-fan-label { opacity: 0; transition-delay: 0s; transition-duration: 0.15s; }
+.rate-fan.out .rate-fan-opt { opacity: 0; transform: scale(0.3); transition-delay: 0s; transition-duration: 0.15s; }
+.rate-fan.out .rate-fan-opt.picked { opacity: 1; transform: scale(1.1); }
+.rate-fan.out .rate-fan-hub { opacity: 0; transition: opacity 0.15s; }
+
+/* Tap sur un titre deja note : petit rappel que le geste est l'appui long */
+.act-rate.nudge .act-ico { animation: rate-nudge 0.4s ease-in-out; }
+@keyframes rate-nudge {
+  0%, 100% { transform: none; }
+  25% { transform: rotate(-10deg); }
+  75% { transform: rotate(10deg); }
 }
 
-.rate-clear {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  width: 100%;
-  margin-top: 6px;
-  padding: 7px;
-  border-radius: 12px;
-  font-size: 12.5px;
-  font-weight: 600;
-  color: var(--text-muted);
-  background: var(--surface-2);
+@media (prefers-reduced-motion: reduce) {
+  .rate-fan-opt, .rate-fan-arc, .rate-fan-label, .rate-fan-hub { transition-duration: 0.01s !important; transition-delay: 0s !important; }
 }
-.rate-clear svg { width: 13px; height: 13px; }
-.rate-clear.hover { color: var(--text); }
 
 /* Filtre par note (feuille de filtres, page Mes notes) */
 .rate-filter { padding-top: 4px; }
